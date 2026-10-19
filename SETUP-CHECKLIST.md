@@ -233,6 +233,43 @@ Found on the way: **`--update-rate 8000` streams with 0 underruns on Windows** (
   (`--monitor-device` to pick another). Confirmed by the user
 - (the first web-interface attempt was cut off: `espdr_cw.py.incomplete`, not used)
 
+### Each board sends and receives: `espdr_trx_tk.py` + `trx_board.py`
+
+- [x] The esp32-sdr-trx **TX image also holds the receiver** (build flags 3 = narrowband RX + TX) and sets the receiver up again after
+  each transmission (`TX_END_FAILED` if it cannot). Built with decimation 16: `release/esp32-sdr-trx-trx-decim16.bin` (77,424 bytes, fits)
+- [x] One board, one link (`scripts/trx_cycle.py`): RX 4 s (62.0 ksps, 0 lost) -> TX "DE W4DQB/EXP" (finished, 0 underruns) -> RX 4 s
+  (62.4 ksps, 0 lost)
+- [x] `trx_board.Transceiver`: one board, half duplex, no espdr-rx/rtl_tcp: a thread keeps `nb.Link.run` streaming and only queues
+  packets; a DSP thread conjugates, removes DC, applies the LO's fine offset, then AFC, demodulator, decoder, monitor. Transmit stops the
+  stream, runs a transmitter session on the same link, then resumes
+- [x] Headless, both boards at 2394.250 MHz: **B->A `[carrier]VVV DE W4DQB/EXP`, A->B `[carrier]VVV DE W4DQB/EXP`** (both perfect)
+- [x] `espdr_trx_tk.py`: **board selector** (lists ESP boards on native USB with port and MAC; Board A/B known by MAC; warns before an
+  unknown board: a third ESP board is on COM13, MAC 38:44:BE:A9:FD:A8), then the station window for that board. Run it twice, one per board
+  ```powershell
+  .\.venv\Scripts\python.exe espdr_trx_tk.py --call W4DQB/EXP        # pick Board A; run again and pick Board B
+  ```
+
+### Feld Hellschreiber mode
+
+- [x] `hell.py`: 5x7 font in 7 columns (A-Z, 0-9, / ? . , - = + space); Feld Hell timing (2.5 char/s, 57.14 ms per column,
+  14 elements of 4.08 ms, bottom-up); `HellRx` measures the 700 Hz tone in 28 slots per column with a slow AGC. No decoding: the image is read
+  by eye, two stacked copies so a glyph split by the start offset reads across the join
+- [x] Offline round trip (`scripts/hell_png.py` renders columns to PNG): aligned and offset cases read correctly
+- [x] TX: `CwKeyer` envelope window is now a parameter (`env_taps`, default 40 = 5 ms for CW); Hell uses 8 (1 ms): 72 records
+  mid-transition instead of 229 for "E"
+- [x] Window: **Mode** selector (CW / Feld Hell) in the per-board station; Hell mode shows the scrolling image instead of the text,
+  checks characters against the Hell font, previews the transmit time. Bugs found in testing: method name clashed with the RX/TX
+  indicator (`mode` -> `cur_mode`); Tk 8.6.15 takes raw PGM bytes for PhotoImage, not base64
+- [x] **Live, 2394.250 MHz: B->A without space shift: "CQ DE W4DQB/EXP" perfectly clear (key-up shows light grey); A->B with space shift:
+  white background, readable across the copies.** For Hell, leave the space shift **off**: readable, and the emission stays on one frequency
+- [x] **Column phase** (letters split across the copies; not slant: the crystals drift ~0.1 ms over a 10 s message):
+  - **Auto phase** (`HellRx.auto`, on by default): the end of a steady carrier >= 1 s (our 2 s lead tone) re-aligns the columns; the first
+    column starts 0.5 s later. The end is placed inside its slot from that slot's level; a constant +1 slot makes up for the lead's 5 ms
+    fade-out and slot averaging. Measured offline against the known glyphs: 0 slots error at 10 start offsets (middle-of-slot guess: 0/-1;
+    sub-slot without the +1: constant -1)
+  - **Phase slider** (0-27 slots) rolls everything shown, for signals without a lead tone or fine-tuning
+  - Live both ways: re-aligned once per message, letters whole in both copies
+
 ```powershell
 .\.venv\Scripts\python.exe espdr_cw_tk.py --call W4DQB/EXP
 ```

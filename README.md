@@ -26,7 +26,9 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 
 ## What works
 
-- Sending text as CW from board B and decoding it live from board A (confirmed on the air, e.g. `VVV DE <call>`).
+- **Both boards send and receive** (half duplex, one window per board): A→B and B→A both decoded `VVV DE <call>` on the air.
+- **Feld Hellschreiber** as a second mode: text sent as a dot-matrix picture and shown as a scrolling image that you read by eye
+  (`CQ DE <call>` read clearly both ways on the air).
 - A Tk window with a frequency selector, RX/TX indicator, receive/decode and transmit/encode sections, and a speaker monitor
   with volume.
 - Receiving without sample loss on Windows, using a custom receiver firmware (see below).
@@ -72,6 +74,19 @@ On the PC (`espdr_fldigi.py`):
   spaces) and keeps it at a 700 Hz audio tone.
 - **USB demodulator:** 48 kHz audio, 200–2800 Hz, with a slow AGC.
 
+### Feld Hellschreiber (`hell.py`)
+
+Feld Hell keys the same carrier on and off, but sends a picture of the text: each character is a 5×7 dot-matrix glyph in 7
+columns, sent column by column from the bottom up, 2.5 characters per second (a column every 57.14 ms, 14 elements of 4.08 ms).
+The transmitter uses a 1 ms envelope window instead of CW's 5 ms so the short elements stay sharp. The receiver measures the tone
+in 28 slots per column and draws each column; the window shows two stacked copies, as on any Hell display. The chip's 18 dB key-up
+shows as light grey and reads fine, so for Hell the space shift can stay off.
+
+A receiver does not know where the sender's columns begin, so letters can come out cut at an arbitrary height (column phase).
+**Auto phase** fixes that for this project's transmissions: when a steady carrier of at least 1 s ends (the lead tone), the columns
+are re-aligned so the first one starts 0.5 s later, as the transmitter sends it. The **Phase** slider shifts the whole image by hand,
+for signals without a lead tone.
+
 ### Decode (`cw_decoder.py`)
 
 The decoder measures the level at the 700 Hz tone every 5 ms, sets its threshold between a peak tracker and the noise floor, and
@@ -107,10 +122,26 @@ even a perfect synthetic signal.
 
 ## Use
 
+**Each board as its own transceiver** (recommended): run the station once per board and pick the board in the window that opens.
+Both boards send and receive (half duplex), so they work each other like two stations.
+
+```powershell
+.\.venv\Scripts\python.exe espdr_trx_tk.py --call <your call sign>
+```
+
+It loads `release/esp32-sdr-trx-trx-decim16.bin`: the esp32-sdr-trx transmitter image, which also contains the receiver, built with
+the decimation-16 change. The board selector lists the ESP boards on USB by port and MAC; only ESP32-S3 boards run this firmware.
+
+**One receiver board and one transmitter board** in a single window (the first version):
+
 ```powershell
 .\.venv\Scripts\python.exe espdr_cw_tk.py --call <your call sign>
 ```
 
+In both, the window works like this:
+
+- **Mode** (per-board station): CW or Feld Hell. In Hell mode the receive area shows the scrolling Hell image instead of text,
+  with **Auto phase** and a **Phase** slider to keep letters whole.
 - **Frequency:** type MHz (2320.005–2449.995) and press Apply; both boards retune.
 - **Receive / decode:** decoded text, speed (WPM), signal (dB) and the AFC tone; **Monitor** and **Vol** play the receive audio
   (noise and CW) on the default speakers (`--monitor-device` picks another).
@@ -123,8 +154,11 @@ even a perfect synthetic signal.
 
 | File | What it is |
 |---|---|
-| `espdr_cw_tk.py` | The CW station window |
+| `espdr_trx_tk.py` | Station for one board that sends and receives, with the board selector |
+| `trx_board.py` | One board as a half-duplex transceiver over one USB link |
+| `espdr_cw_tk.py` | The CW station window (also the two-board version: one board receives, one transmits) |
 | `cw_decoder.py` | Streaming Morse decoder |
+| `hell.py` | Feld Hellschreiber: font, encoder, receiver (image columns) |
 | `espdr_fldigi.py` | Receive chain (rtl_tcp client, AFC, demodulator), CW keyer and transmitter control; also an fldigi bridge |
 | `decim16-firmware.patch` | Receiver firmware change: decimation 16 (62.5 ksps) |
 | `espdr-windows.patch` | Fixes and additions to the installed `espdr` package for Windows |

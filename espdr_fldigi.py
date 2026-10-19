@@ -255,13 +255,13 @@ class CwKeyer:
     """8 kHz CW audio -> transmitter records. The envelope (5 ms RMS) sets the gain code; the tone's frequency, measured from zero
     crossings while the key is down, sets a constant frequency offset, so the carrier sits at dial + tone like an SSB rig's would."""
 
-    def __init__(self, offset_hz, power_db=0.0, tone_hz=None, space_hz=0.0):
+    def __init__(self, offset_hz, power_db=0.0, tone_hz=None, space_hz=0.0, env_taps=40):
         self.offset_hz = offset_hz                     # dial against the chip's real LO, in Hz of the nominal clock
         self.space_hz = space_hz                       # during spaces, move the (weakest, -18 dB) carrier this far away
         self.peak = txmodes.peak_code(power_db)
         self.tone = tone_hz or 1000.0
         self.fixed = tone_hz is not None
-        self.ms = dsp.Fir(np.ones(40) / 40)
+        self.ms = dsp.Fir(np.ones(env_taps) / env_taps)  # envelope window: 40 = 5 ms for CW; Feld Hell's 4 ms elements need ~1 ms
         self.ref = 0.0
         self.prev = 0.0
         self.crossings = self.down_n = 0
@@ -380,7 +380,7 @@ class Transmitter:
         log(f"TX: dial {dial_hz / 1e6:.6f} MHz, LO {real_lo / 1e6:.6f} MHz nominal, dial offset {offset:+.0f} Hz")
 
     def transmit(self, blocks, stop):
-        keyer = CwKeyer(self.offset_hz, self.power_db, self.tone_hz, self.space_hz)
+        keyer = CwKeyer(self.offset_hz, self.power_db, self.tone_hz, self.space_hz, getattr(self, "env_taps", 40))
         q = queue.Queue(maxsize=64)
 
         def producer():
