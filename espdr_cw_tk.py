@@ -25,7 +25,8 @@ import espdr_fldigi as br
 import hell
 from cw_decoder import MORSE, CwDecoder
 
-MODES = {"CW": "cw", "Feld Hell": "hell"}
+MODES = {"CW": "cw", "Feld Hell": "hell", "Olivia 8/250": "olivia-8/250", "Olivia 16/500": "olivia-16/500"}
+OLIVIA_CHARS = {chr(c) for c in range(32, 127)}   # Olivia carries 7-bit ASCII, lower case included
 HELL_ROW_PX, HELL_COL_PX = 2, 6           # a glyph row is 4 receive slots, a glyph column 1 slot wide: keep letters near their shape
 
 BAND_MHZ = (2320.005, 2449.995)
@@ -306,6 +307,13 @@ class Window:
         self.hell_canvas.itemconfigure(self.hell_item, image=self.hell_photo)
 
     def preview(self):
+        if self.cur_mode().startswith("olivia-"):
+            import olivia
+            text = " ".join(self.msg.get().split())
+            m = olivia.Mode(self.cur_mode().split("-", 1)[1])
+            secs = -(-len(text) // m.bits) * olivia.BLOCK * m.symbol_s if text else 0
+            self.code.configure(text=f"Olivia {m.name}: {len(text)} characters, {secs:.1f} s after the lead tone" if text else "")
+            return
         if self.cur_mode() == "hell":
             text = " ".join(self.msg.get().upper().split())
             self.code.configure(text=f"Feld Hell: {len(text)} characters, {hell.seconds(text):.1f} s" if text else "")
@@ -320,8 +328,10 @@ class Window:
             return self.args.wpm
 
     def _start_tx(self, text, lead_s):
-        text = " ".join(text.upper().split())
-        alphabet, what = (hell.CHARS, "no Hell glyph for") if self.cur_mode() == "hell" else (ENCODE, "no Morse for")
+        olivia_mode = self.cur_mode().startswith("olivia-")
+        text = " ".join(text.split() if olivia_mode else text.upper().split())
+        alphabet, what = ((OLIVIA_CHARS, "not 7-bit ASCII") if olivia_mode else
+                          (hell.CHARS, "no Hell glyph for") if self.cur_mode() == "hell" else (ENCODE, "no Morse for"))
         bad = sorted({c for c in text if c != " " and c not in alphabet})
         if bad:
             self.say(f"{what}: " + " ".join(bad))
@@ -389,7 +399,12 @@ class Window:
         self.keylight.itemconfigure(self.keydot, fill="#f59e0b" if d.key else "gray70")
         afc = r.rx.afc if r.rx else None
         tone = f"{afc.target:.0f}" if afc and afc.locked else "-"
-        self.stats.configure(text=f"speed {d.wpm:4.1f} WPM   signal {d.snr_db:4.1f} dB   tone {tone} Hz")
+        orx = getattr(r, "olivia_rx", None)
+        if orx is not None and self.cur_mode().startswith("olivia-"):
+            state = f"locked, offset {orx.df:+.0f} Hz" if orx.locked else "searching"
+            self.stats.configure(text=f"Olivia {orx.m.name}: {state}   block quality {orx.quality:4.1f}")
+        else:
+            self.stats.configure(text=f"speed {d.wpm:4.1f} WPM   signal {d.snr_db:4.1f} dB   tone {tone} Hz")
         self.root.after(100, self.poll)
 
     def close(self):

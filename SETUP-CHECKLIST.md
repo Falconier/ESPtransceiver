@@ -313,3 +313,29 @@ Use with two boards: always pass `--native --port COMx`:
 espdr-rx --native --port COM4                                                  # board A: receiver
 espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --duration 10   # board B: transmitter
 ```
+
+### Olivia MFSK (8/250 and 16/500)
+
+- [x] Reference: fldigi's `src/include/jalocha/pj_mfsk.h` (Pawel Jalocha's Olivia), read and reimplemented in numpy (`olivia.py`):
+  7-bit character -> 64 chips by inverse Walsh-Hadamard; scrambling with 0xE257E6D0291574EC from bit 13*k; chip t of character k sets
+  bit (k+t) mod bits of symbol t; Gray-coded tones 31.25 Hz apart (both modes), 32 ms symbols; band placed as fldigi does around the
+  centre (700 Hz here). Codec checks: transforms exact inverses; round trip exact in both modes; decodes with soft-bit noise sigma 1.0
+- [x] `olivia_rx.py`: spectra every 1/8 symbol (512-point Hann, 3.9 Hz bins); acquisition = tone comb vs the band just outside it (signal
+  6-50x, noise ~1; the gaps between tones are no help), stable for 8 symbols, needs half the tones present (not a lead tone), drift rate
+  from a line through the 8 offsets; decoding at 8 timing phases x tone shifts -2..+2 from kept spectra; block taken at the best
+  quality within +-32 symbols; squelch (block quality >= 5, character >= 4); second-order tracking on the cleanest spectrum of each symbol;
+  complex-baseband input at 16 kHz in the station (room for kHz of drift)
+- [x] Offline (reference audio, `scripts/olivia_offline.py`): all 10 cases OK in both modes (clean, 0 dB, +23 Hz, 100 Hz/s drift, offset +
+  drift + 3 dB). Sensitivity: 8/250 full message at -6 dB SNR (3 kHz), loses the first blocks at -9; 16/500 loses the first blocks at -6
+  (acquisition is the limit; published Olivia figures are ~5 dB better)
+- [x] TX: `Mode.tx_records()` sends one tone per symbol (the chip makes one carrier at a time), phase-continuous, after a 2 s lead at the
+  centre. Record frequency steps are 28.6 Hz, so the fields carry the rounding error forward: every tone's average within 0.11 Hz (plain
+  rounding: up to 14.1 Hz)
+- [x] AFC hold mode for Olivia (`RxAfc.hold_after_lock`): locks only on a steady carrier (>= 15 dB, same frequency frame to frame for 5
+  frames: not noise, not Olivia's tones), measures the lead tone's drift line while it lasts (+150.2 for +150 Hz/s, -119.6 for -120 at 0 dB)
+  and mixes along that line through the message; unlocks after ~3 s quiet. CW/Hell AFC unchanged (regression OK)
+- [x] Station: Mode list has Olivia 8/250 and 16/500; lower case allowed; preview shows the time; status shows lock, offset and quality
+- [x] **Live at 2394.250 MHz: 8/250 B->A and A->B, 16/500 B->A and A->B: all "CQ DE W4DQB/EXP", 0 underruns.** The boards drifted about
+  -110 Hz/s while transmitting; the AFC's drift line took it out
+- [ ] Interop with fldigi not tested: VB-CABLE's endpoints went missing (one of two driver instances in Error state); repair, then play our
+  Olivia into fldigi and fldigi's into ours

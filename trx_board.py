@@ -18,8 +18,10 @@ import numpy as np
 
 import espdr_fldigi as br
 import hell
+import olivia
+import olivia_rx
 from cw_decoder import CwDecoder
-from espdr import board, nb, txlink
+from espdr import board, nb, txlink, txmodes
 
 DECIM = 16
 DC_TAU_S = 0.5
@@ -55,6 +57,7 @@ class Transceiver:
         self.mode = "cw"                         # "cw" or "hell" (Feld Hellschreiber)
         self.hell_cols = queue.Queue()           # received Hell image columns for the window
         self.hell_rx = hell.HellRx(rate=br.AUDIO_RATE, tone=args.tone, emit=self.hell_cols.put)
+        self.olivia_rx = None                    # olivia_rx.OliviaRx in the Olivia modes
 
     # -- start
     def start(self):
@@ -136,9 +139,14 @@ class Transceiver:
                 w = 2 * np.pi * fine / rate
                 z = z * np.exp(1j * (phase + w * np.arange(len(z))))
                 phase = (phase + w * len(z)) % (2 * np.pi)
-            audio = self.demod.process(self.afc.process(z))
+            zc = self.afc.process(z)
+            audio = self.demod.process(zc)
             if self.mode == "hell":
                 self.hell_rx.process(audio)
+            elif self.mode.startswith("olivia-"):
+                orx = self.olivia_rx
+                if orx is not None:
+                    orx.process(zc)                           # complex baseband: room for kHz of drift (the audio band is not)
             else:
                 self.decoder.process(audio)
             mon = self.monitor
@@ -169,6 +177,15 @@ class Transceiver:
         if self.sending:
             return "wait until the transmission ends"
         self.mode = mode
+        if mode.startswith("olivia-"):
+            m = olivia.Mode(mode.split("-", 1)[1], center=self.a.tone)
+            self.olivia_rx = olivia_rx.OliviaRx(m, rate=br.DECIM_RATES[DECIM], emit=self.text.put, complex_in=True,
+                                                search=m.bw + 300)
+        else:
+            self.olivia_rx = None
+        if self.afc is not None:                         # Olivia: lock on the lead tone, then hold (the tones would pull it)
+            self.afc.hold_after_lock = mode.startswith("olivia-")
+            self.afc.reset()
         return None
 
     def set_frequency(self, mhz):
@@ -197,6 +214,8 @@ class Transceiver:
         return None
 
     def _send(self, text, wpm, lead_s, shift_spaces):
+        if self.mode.startswith("olivia-"):
+            return self._send_olivia(text, lead_s)
         rate, tone = br.TX_RATE, self.a.tone
         parts = []
         if lead_s:
@@ -217,6 +236,39 @@ class Transceiver:
             what = (f"Feld Hell {text!r}" if hell_mode else f"{text!r} at {wpm:g} WPM") if text else f"{lead_s:g} s tone"
             self.log.put(f"TX {self.dial_mhz:.3f} MHz: {what}")
             self.tx_obj.transmit((audio[i:i + 160] for i in range(0, len(audio), 160)), threading.Event())
+        except Exception as e:                                   # noqa: BLE001 - shown in the window
+            self.log.put(f"transmit failed: {e}")
+        finally:
+            self.afc.reset()
+            self.sending = False
+            self.hold.clear()
+
+    def _send_olivia(self, text, lead_s):
+        """Olivia goes out as records (one tone per symbol, exact average frequencies), always after a lead tone: the
+        receiver's AFC locks on it and then holds."""
+        name = self.mode.split("-", 1)[1]
+        m = olivia.Mode(name, center=self.a.tone)
+        t = self.tx_obj
+        try:
+            reach = txmodes.MAX_Q4 * txmodes.Q4_HZ
+            edge = max(abs(t.offset_hz + m.tone_hz(0)), abs(t.offset_hz + m.tone_hz(m.tones - 1)))
+            if edge > reach:
+                raise RuntimeError(f"Olivia {name} does not fit here: the band reaches {edge:.0f} Hz from the LO, records {reach:.0f}")
+            recs = m.tx_records(text, t.offset_hz, txmodes.peak_code(t.power_db), lead_s=lead_s or 2.0, rate=br.TX_RATE)
+            self.hold.set()
+            if not self.idle.wait(5.0):
+                raise RuntimeError("the receiver did not stop")
+            what = f"Olivia {name} {text!r}, {len(recs) / br.TX_RATE:.1f} s" if text else f"{lead_s or 2.0:g} s tone"
+            self.log.put(f"TX {self.dial_mhz:.3f} MHz: {what}")
+            s = t.session
+            s.configure(t.lo_hz, br.TX_RATE, limit_s=600)
+            s.begin(expect_word=txlink.lo_word(t.lo_hz))
+            q = queue.Queue()
+            for i in range(0, len(recs), 800):
+                q.put(recs[i:i + 800])
+            q.put(None)
+            summary = s.stream(q, target_fill=br.TX_FILL)
+            br.log(f"TX: off ({txlink.END_REASONS.get(summary['reason'], summary['reason'])}; underruns {summary['underruns']})")
         except Exception as e:                                   # noqa: BLE001 - shown in the window
             self.log.put(f"transmit failed: {e}")
         finally:

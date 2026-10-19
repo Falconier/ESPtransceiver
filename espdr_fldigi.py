@@ -95,11 +95,34 @@ class RxAfc:
         self.phase = 0.0
         self.locked = False
         self.peak = 0.0         # strongest recent ratio: only signals within 12 dB of it steer (not CW spaces, see --space-shift)
+        # Hold after lock (multi-tone modes such as Olivia): lock on the first carrier (the lead tone), then stop steering, which
+        # would chase the changing tones; the mode's receiver follows the drift. After ~3 s without a signal, unlock again.
+        self.hold_after_lock = False
+        self.quiet = 0
+        self.cand_hz, self.cand_n = None, 0     # hold mode locks only on a steady carrier: same frequency for 5 frames
+        # Hold mode also measures the lead tone while it lasts and fits a line (frequency against sample time): the drift. The
+        # mixing then follows that line through the message, so the mode's receiver sees almost no drift (150 Hz/s defeated it).
+        self.lead = []                          # (sample index, Hz) of the lead tone since the lock
+        self.line = None                        # (Hz at sample 0, Hz per sample) fitted to self.lead
+        self.collecting = False
+        self.t_frame = 0                        # sample index of the next spectrum frame's start
+        self.t_mix = 0                          # sample index of the next sample mixed
 
     def reset(self):
-        self.hist, self.shift, self.locked, self.peak = [], 0.0, False, 0.0
+        self.hist, self.shift, self.locked, self.peak, self.quiet = [], 0.0, False, 0.0, 0
+        self.lead, self.line, self.collecting = [], None, False
+
+    def _peak_hz(self, p, k):
+        """The peak's frequency between bins (Gaussian interpolation; a bin is ~15 Hz)."""
+        if 0 < k < len(p) - 1:
+            a, c, d = np.log(p[k - 1:k + 2] + 1e-30)
+            den = a - 2 * c + d
+            return float(self.f[k] + (0.5 * (a - d) / den if den else 0.0) * (self.f[1] - self.f[0]))
+        return float(self.f[k])
 
     def _update(self, seg):
+        t_mid = self.t_frame + self.N / 2
+        self.t_frame += self.N
         p = np.abs(np.fft.fftshift(np.fft.fft(seg * self.win))) ** 2
         self.hist = (self.hist + [p])[-60:]
         if len(self.hist) < 15:
@@ -108,6 +131,34 @@ class RxAfc:
         ratio[~self.band] = 0
         k = int(np.argmax(ratio))
         self.peak = max(float(ratio[k]), self.peak * 0.98)  # decays ~4 dB in 3 s
+        if self.hold_after_lock:
+            if self.locked:
+                self.quiet = self.quiet + 1 if ratio[k] < 30 else 0     # 30: the largest of thousands of noise bins often passes 10
+                if self.quiet > 45:                        # ~3 s without a signal: ready for the next lead tone
+                    self.locked, self.quiet, self.cand_n = False, 0, 0
+                    self.lead, self.line, self.collecting = [], None, False
+                    return
+                if self.collecting:                        # the lead tone goes on: one more point for the drift line
+                    f_k = self._peak_hz(p, k)
+                    if ratio[k] >= 30 and abs(f_k - self.lead[-1][1]) < 30:
+                        self.lead.append((t_mid, f_k))
+                        if len(self.lead) >= 4:
+                            t_, f_ = np.array(self.lead).T
+                            slope, icpt = np.polyfit(t_, f_, 1)
+                            self.line = (float(icpt), float(slope))
+                    else:
+                        self.collecting = False            # the lead ended: the line carries on through the message
+                return
+            # Not locked: a lead tone is a steady carrier, >= 15 dB over the usual spectrum at the same frequency (+-30 Hz) for
+            # 5 frames (~0.33 s). Noise flukes are not steady, and a multi-tone signal's tones change every symbol.
+            if ratio[k] >= 30 and self.cand_hz is not None and abs(self.f[k] - self.cand_hz) < 30:
+                self.cand_hz, self.cand_n = self.f[k], self.cand_n + 1    # compared frame to frame: a drifting lead (~10 Hz/frame) counts
+            else:
+                self.cand_hz, self.cand_n = (self.f[k], 1) if ratio[k] >= 30 else (None, 0)
+            if self.cand_n >= 5:
+                self.shift, self.locked, self.quiet = self.f[k] - self.target, True, 0
+                self.lead, self.line, self.collecting = [(t_mid, self._peak_hz(p, k))], None, True
+            return
         if ratio[k] < 10 or ratio[k] < self.peak / 16:     # nothing 10 dB over the usual spectrum, or a key-up/space: hold
             return
         want = self.f[k] - self.target
@@ -121,9 +172,18 @@ class RxAfc:
         while len(self.buf) >= self.N:
             self._update(self.buf[:self.N])
             self.buf = self.buf[self.N:]
-        step = -2 * np.pi * self.shift / RTL_RATE          # phase-continuous mix down by `shift`
-        ph = self.phase + step * np.arange(len(z))
-        self.phase = (self.phase + step * len(z)) % (2 * np.pi)
+        n = len(z)
+        if self.line is not None and self.locked:          # follow the lead tone's drift line, sample by sample
+            icpt, slope = self.line
+            f = icpt + slope * (self.t_mix + np.arange(n)) - self.target
+            ph = self.phase - 2 * np.pi * np.concatenate([[0.0], np.cumsum(f[:-1])]) / RTL_RATE
+            self.phase = float((self.phase - 2 * np.pi * f.sum() / RTL_RATE) % (2 * np.pi))
+            self.shift = float(f[-1]) if n else self.shift
+        else:
+            step = -2 * np.pi * self.shift / RTL_RATE      # phase-continuous mix down by `shift`
+            ph = self.phase + step * np.arange(n)
+            self.phase = (self.phase + step * n) % (2 * np.pi)
+        self.t_mix += n
         return z * np.exp(1j * ph)
 
 
