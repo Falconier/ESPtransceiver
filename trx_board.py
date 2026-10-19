@@ -17,6 +17,7 @@ import time
 import numpy as np
 
 import espdr_fldigi as br
+import hell
 from cw_decoder import CwDecoder
 from espdr import board, nb, txlink
 
@@ -51,6 +52,9 @@ class Transceiver:
         self.restart = False                     # retune: leave link.run once, reconfigure
         self.packets = queue.Queue(maxsize=2000)
         self.space_hz = 0.0
+        self.mode = "cw"                         # "cw" or "hell" (Feld Hellschreiber)
+        self.hell_cols = queue.Queue()           # received Hell image columns for the window
+        self.hell_rx = hell.HellRx(rate=br.AUDIO_RATE, tone=args.tone, emit=self.hell_cols.put)
 
     # -- start
     def start(self):
@@ -133,7 +137,10 @@ class Transceiver:
                 z = z * np.exp(1j * (phase + w * np.arange(len(z))))
                 phase = (phase + w * len(z)) % (2 * np.pi)
             audio = self.demod.process(self.afc.process(z))
-            self.decoder.process(audio)
+            if self.mode == "hell":
+                self.hell_rx.process(audio)
+            else:
+                self.decoder.process(audio)
             mon = self.monitor
             if mon is not None:
                 mon.write((audio * self.volume).astype(np.float32))
@@ -156,6 +163,12 @@ class Transceiver:
         elif not on and self.monitor is not None:
             m, self.monitor = self.monitor, None
             m.close()
+        return None
+
+    def set_mode(self, mode):
+        if self.sending:
+            return "wait until the transmission ends"
+        self.mode = mode
         return None
 
     def set_frequency(self, mhz):
@@ -191,15 +204,18 @@ class Transceiver:
             parts.append(0.5 * np.minimum(1, np.minimum(t, t[::-1]) / 0.005) * np.sin(2 * np.pi * tone * t))
             if text:
                 parts.append(np.zeros(rate // 2))
+        hell_mode = self.mode == "hell"
         if text:
-            parts.append(br.morse_audio(text, wpm=wpm, tone=tone))
+            parts.append(hell.audio(text, tone=tone, rate=rate) if hell_mode else br.morse_audio(text, wpm=wpm, tone=tone))
         audio = np.concatenate(parts)
+        self.tx_obj.env_taps = 8 if hell_mode else 40      # Hell's 4 ms elements need a 1 ms envelope window
         self.hold.set()
         try:
             if not self.idle.wait(5.0):
                 raise RuntimeError("the receiver did not stop")
             self.tx_obj.space_hz = self.space_hz if shift_spaces else 0.0
-            self.log.put(f"TX {self.dial_mhz:.3f} MHz: " + (repr(text) + f" at {wpm:g} WPM" if text else f"{lead_s:g} s tone"))
+            what = (f"Feld Hell {text!r}" if hell_mode else f"{text!r} at {wpm:g} WPM") if text else f"{lead_s:g} s tone"
+            self.log.put(f"TX {self.dial_mhz:.3f} MHz: {what}")
             self.tx_obj.transmit((audio[i:i + 160] for i in range(0, len(audio), 160)), threading.Event())
         except Exception as e:                                   # noqa: BLE001 - shown in the window
             self.log.put(f"transmit failed: {e}")

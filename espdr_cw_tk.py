@@ -20,8 +20,13 @@ from tkinter import ttk
 
 import numpy as np
 
+
 import espdr_fldigi as br
+import hell
 from cw_decoder import MORSE, CwDecoder
+
+MODES = {"CW": "cw", "Feld Hell": "hell"}
+HELL_ROW_PX, HELL_COL_PX = 2, 6           # a glyph row is 4 receive slots, a glyph column 1 slot wide: keep letters near their shape
 
 BAND_MHZ = (2320.005, 2449.995)
 ENCODE = {ch: code for code, ch in MORSE.items() if len(ch) == 1}
@@ -162,6 +167,12 @@ class Window:
         spin.pack(side="left", padx=4)
         spin.bind("<Return>", lambda e: self.apply_freq())
         ttk.Button(top, text="Apply", command=self.apply_freq).pack(side="left")
+        self.mode_name = tk.StringVar(value="CW")
+        if hasattr(radio, "set_mode"):                   # the per-board transceiver has modes; the two-board station is CW only
+            ttk.Label(top, text="Mode").pack(side="left", padx=(16, 4))
+            mode_box = ttk.Combobox(top, textvariable=self.mode_name, values=list(MODES), state="readonly", width=10)
+            mode_box.pack(side="left")
+            mode_box.bind("<<ComboboxSelected>>", lambda e: self.set_mode())
         self.mode = tk.Label(top, text="OFF", width=5, font=("Segoe UI", 14, "bold"), fg="white", bg="gray40")
         self.mode.pack(side="right")
         self.keylight = tk.Canvas(top, width=18, height=18, highlightthickness=0)
@@ -178,10 +189,26 @@ class Window:
         self.rxtext.tag_configure("note", foreground="gray50")
         sb.pack(side="right", fill="y")
         self.rxtext.pack(fill="both", expand=True, padx=4, pady=4)
+        # Feld Hell display (shown instead of the text in Hell mode): two stacked copies of each received column, newest at right
+        self.hell_canvas = tk.Canvas(rxf, height=2 * hell.ROWS_RX * HELL_ROW_PX, bg="white", highlightthickness=0)
+        self.hell_item = self.hell_canvas.create_image(0, 0, anchor="nw")
+        self.hell_data = np.zeros((0, hell.ROWS_RX))
+        self.hell_photo = None
         row = ttk.Frame(rxf)
         row.pack(fill="x", padx=4, pady=(0, 4))
+        self.rx_row = row
         self.stats = ttk.Label(row, text="speed - WPM   signal - dB   tone - Hz")
         self.stats.pack(side="left")
+        # Hell column phase: automatic re-alignment on our lead tone, plus a manual shift (receive slots) for everything shown
+        self.hell_ctl = ttk.Frame(self.rx_row)
+        hrx = getattr(radio, "hell_rx", None)
+        self.hell_auto = tk.BooleanVar(value=bool(hrx and hrx.auto))
+        ttk.Checkbutton(self.hell_ctl, text="Auto phase", variable=self.hell_auto,
+                        command=lambda: setattr(hrx, "auto", self.hell_auto.get()) if hrx else None).pack(side="left")
+        ttk.Label(self.hell_ctl, text="Phase").pack(side="left", padx=(10, 4))
+        self.hell_phase = tk.IntVar(value=0)
+        ttk.Scale(self.hell_ctl, from_=0, to=hell.ROWS_RX - 1, length=140, variable=self.hell_phase,
+                  command=lambda v: (self.hell_phase.set(round(float(v))), self.draw_hell())).pack(side="left")
         ttk.Button(row, text="Clear", command=self.clear_rx).pack(side="right")
         self.vol = tk.DoubleVar(value=radio.volume * 100)
         ttk.Scale(row, from_=0, to=100, variable=self.vol, length=110,
@@ -244,7 +271,45 @@ class Window:
         self.rxtext.configure(state="disabled")
 
     # -- transmit side
+    def cur_mode(self):
+        return MODES[self.mode_name.get()]
+
+    def set_mode(self):
+        err = self.radio.set_mode(self.cur_mode())
+        if err:
+            self.say(err)
+            return
+        if self.cur_mode() == "hell":
+            self.rxtext.pack_forget()
+            self.hell_canvas.pack(fill="both", expand=True, padx=4, pady=4, before=self.rx_row)
+            self.hell_ctl.pack(side="left", padx=(16, 0), after=self.stats)
+        else:
+            self.hell_canvas.pack_forget()
+            self.hell_ctl.pack_forget()
+            self.rxtext.pack(fill="both", expand=True, padx=4, pady=4, before=self.rx_row)
+        self.preview()
+        self.say(f"mode {self.mode_name.get()}")
+
+    def draw_hell(self):
+        width = max(self.hell_canvas.winfo_width(), 200)
+        n = width // HELL_COL_PX
+        self.hell_data = self.hell_data[-n:]
+        a = np.zeros((n, hell.ROWS_RX))
+        if len(self.hell_data):
+            a[-len(self.hell_data):] = self.hell_data
+        a = np.roll(a, -self.hell_phase.get(), axis=1)          # manual phase: move the image down by that many slots
+        g =(255 * (1 - np.clip(a.T[::-1], 0, 1))).astype(np.uint8)     # rows top-down, ink dark on white
+        g = np.kron(np.vstack([g, g]), np.ones((HELL_ROW_PX, HELL_COL_PX), np.uint8))
+        h, w = g.shape
+        pgm = f"P5 {w} {h} 255\n".encode() + g.tobytes()
+        self.hell_photo = tk.PhotoImage(data=pgm, format="PPM")      # Tk 8.6 takes raw PGM bytes (not base64)
+        self.hell_canvas.itemconfigure(self.hell_item, image=self.hell_photo)
+
     def preview(self):
+        if self.cur_mode() == "hell":
+            text = " ".join(self.msg.get().upper().split())
+            self.code.configure(text=f"Feld Hell: {len(text)} characters, {hell.seconds(text):.1f} s" if text else "")
+            return
         words = self.msg.get().upper().split()
         self.code.configure(text="  /  ".join(" ".join(ENCODE.get(c, "?") for c in w) for w in words))
 
@@ -256,9 +321,10 @@ class Window:
 
     def _start_tx(self, text, lead_s):
         text = " ".join(text.upper().split())
-        bad = sorted({c for c in text if c != " " and c not in ENCODE})
+        alphabet, what = (hell.CHARS, "no Hell glyph for") if self.cur_mode() == "hell" else (ENCODE, "no Morse for")
+        bad = sorted({c for c in text if c != " " and c not in alphabet})
         if bad:
-            self.say("no Morse for: " + " ".join(bad))
+            self.say(f"{what}: " + " ".join(bad))
             return False
         wpm = self._wpm()
         self.radio.decoder.set_wpm(wpm)              # we hear ourselves: start the decoder at the right speed
@@ -302,6 +368,14 @@ class Window:
 
     def poll(self):
         r = self.radio
+        cols = getattr(r, "hell_cols", None)
+        if cols is not None and not cols.empty():
+            new = []
+            while not cols.empty():
+                new.append(cols.get_nowait())
+            self.hell_data = np.vstack([self.hell_data, np.array(new)])
+            if self.cur_mode() == "hell":
+                self.draw_hell()
         while not r.text.empty():
             self.append(r.text.get_nowait())
         while not r.log.empty():
