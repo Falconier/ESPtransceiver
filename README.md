@@ -29,6 +29,7 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 - **Both boards send and receive** (half duplex, one window per board): A→B and B→A both decoded `VVV DE <call>` on the air.
 - **Feld Hellschreiber** as a second mode: text sent as a dot-matrix picture and shown as a scrolling image that you read by eye
   (`CQ DE <call>` read clearly both ways on the air).
+- **Olivia 8/250 and 16/500** (multi-tone FSK with strong error correction): `CQ DE <call>` decoded both ways in both modes on the air.
 - A Tk window with a frequency selector, RX/TX indicator, receive/decode and transmit/encode sections, and a speaker monitor
   with volume.
 - Receiving without sample loss on Windows, using a custom receiver firmware (see below).
@@ -87,6 +88,19 @@ A receiver does not know where the sender's columns begin, so letters can come o
 are re-aligned so the first one starts 0.5 s later, as the transmitter sends it. The **Phase** slider shifts the whole image by hand,
 for signals without a lead tone.
 
+### Olivia (`olivia.py`, `olivia_rx.py`)
+
+Olivia follows Pawel Jalocha's design as implemented in fldigi (reimplemented here): each 7-bit character becomes 64 chips through a
+Walsh-Hadamard transform, the chips are scrambled and spread over 64 symbols, and each symbol is a Gray-coded tone. 8/250 uses 8 tones
+in 250 Hz and 16/500 16 tones in 500 Hz, both 31.25 Hz apart with 32 ms symbols.
+
+- **Transmit:** one tone per symbol, phase-continuous, after a 2 s lead tone. The chip's frequency records move in 28.6 Hz steps, so
+  the rounding error is carried from record to record: every tone's average frequency is exact (within 0.1 Hz).
+- **Receive:** the AFC locks on the lead tone, measures its drift (the boards drift ~110 Hz/s while sending) and follows that line
+  through the message instead of chasing the tones. The Olivia receiver works on the complex baseband (room for kHz of drift),
+  finds the tone comb, tracks what drift is left, and decodes each 64-symbol block at the timing and tone alignment that decode best.
+  It needs no lead tone itself, so it can also receive other stations.
+
 ### Decode (`cw_decoder.py`)
 
 The decoder measures the level at the 700 Hz tone every 5 ms, sets its threshold between a peak tracker and the noise floor, and
@@ -140,8 +154,9 @@ the decimation-16 change. The board selector lists the ESP boards on USB by port
 
 In both, the window works like this:
 
-- **Mode** (per-board station): CW or Feld Hell. In Hell mode the receive area shows the scrolling Hell image instead of text,
-  with **Auto phase** and a **Phase** slider to keep letters whole.
+- **Mode** (per-board station): CW, Feld Hell, Olivia 8/250 or Olivia 16/500. In Hell mode the receive area shows the scrolling
+  Hell image instead of text, with **Auto phase** and a **Phase** slider to keep letters whole. In Olivia the status line shows
+  lock, offset and decode quality; keep the lead tone on (the receiver's AFC needs it).
 - **Frequency:** type MHz (2320.005–2449.995) and press Apply; both boards retune.
 - **Receive / decode:** decoded text, speed (WPM), signal (dB) and the AFC tone; **Monitor** and **Vol** play the receive audio
   (noise and CW) on the default speakers (`--monitor-device` picks another).
@@ -159,6 +174,8 @@ In both, the window works like this:
 | `espdr_cw_tk.py` | The CW station window (also the two-board version: one board receives, one transmits) |
 | `cw_decoder.py` | Streaming Morse decoder |
 | `hell.py` | Feld Hellschreiber: font, encoder, receiver (image columns) |
+| `olivia.py` | Olivia: codec, tone plan, transmitter records, reference modulator |
+| `olivia_rx.py` | Olivia receiver: acquisition, drift tracking, timing and block sync |
 | `espdr_fldigi.py` | Receive chain (rtl_tcp client, AFC, demodulator), CW keyer and transmitter control; also an fldigi bridge |
 | `decim16-firmware.patch` | Receiver firmware change: decimation 16 (62.5 ksps) |
 | `espdr-windows.patch` | Fixes and additions to the installed `espdr` package for Windows |
