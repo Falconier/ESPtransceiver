@@ -1,0 +1,278 @@
+# ESP32 SDR transmit + receive: requirements & setup checklist
+
+Replicates https://github.com/h0m3us3r/eSpDR/issues/3, which is implemented in
+**jochenhammes/esp32-sdr-trx** (built on h0m3us3r/eSpDR).
+
+## 0. Hardware reality check
+
+| Board | Usable? | Why |
+|---|---|---|
+| ESP32-S3 (x2) | **Yes** | All firmware, register addresses and the `esptool --chip esp32s3` call are S3-specific |
+| ESP32-C5 (x2) | **No** | Different chip (RISC-V, dual-band radio). No port exists; the undocumented S3 registers in issue #3 don't apply |
+
+Your two S3s make a full TX/RX pair: **board A = `espdr-tx` transmitter, board B = `espdr-rx` receiver** (RX covers 1.84-2.79 GHz, which includes the 2320-2450 MHz TX range).
+
+- [ ] Each S3 board ideally has **two USB ports**: native USB (303a:1001) + a USB-UART bridge (CH340/CH343/CP210x/FTDI). The tool loads the firmware through the bridge without buttons.
+- [ ] Single-port boards (e.g. XIAO S3) work with `--native`: hold BOOT, tap RESET, then run the command.
+- [ ] 2 USB data cables per two-port board (4 total for both S3s)
+- [ ] Optional for checking the TX independently: a second SDR (HackRF / PlutoSDR / any 13 cm receiver)
+- [ ] Optional (only for full 80 Msps eSpDR, not needed here): Alchitry Au FPGA + Br + FT600 board
+
+## 1. Legal
+
+- [ ] **Amateur radio licence** that covers 13 cm (2320-2450 MHz). Needed for `espdr-tx` (`--accept-licence` is your statement that you hold one).
+- [ ] First tests: low power is already the default (microwatts). Keep metres apart or use a dummy load. Don't add amplifiers or gain antennas.
+
+## 2. OS
+
+| OS | Status |
+|---|---|
+| Linux (Ubuntu/Debian/Fedora/Arch) | Upstream-tested |
+| **Windows 11 (this PC)** | Untested upstream; **installed and self-tested here** (pure Python: pyserial + esptool) |
+| WSL2 + usbipd-win | Fallback if Windows misbehaves; usbipd is already installed, but no distro yet (`wsl --install -d Ubuntu`) |
+
+## 3. Software packages
+
+Host tools (no build needed; the firmware ships in the wheel):
+
+- [x] Python >= 3.10 (using 3.13 in `.venv`)
+- [x] `esp32_sdr_trx-1.0.0rc4-py3-none-any.whl` (release v1.0.0-rc4, SHA256 verified) in `release/`
+- [x] Pulled in automatically: `numpy>=1.21`, `pyserial>=3.5`, `esptool>=5.0` (got 5.6.0)
+- [x] `sounddevice` (the `[audio]` extra) for transmitting from a sound card
+- [ ] **SDR++** (Windows build from https://github.com/AlexandreRouma/SDRPlusPlus/releases) as the receiver UI
+- [ ] USB-UART drivers if Windows doesn't show a COM port: CH343/CH340 (WCH) or CP210x (Silicon Labs)
+- [ ] Linux only: udev rule `70-espdr.rules` (or `dialout` group), plus `libportaudio2` for audio
+
+Only to rebuild firmware or use the research branch (raw 80 Msps I/Q TX, LoRa):
+
+- [ ] ESP-IDF **v5.5.3+** (`make -C firmware images`; research build: `make -C firmware TX=1 IQTEST=1`)
+- [ ] `make`, git, and Linux/WSL are recommended for this path
+- [ ] Python dev extras: `pip install -e '.[dev]'` (scipy, pytest)
+
+## 4. Repos (cloned into `repos/`)
+
+- [x] https://github.com/jochenhammes/esp32-sdr-trx: `main` (espdr-rx / espdr-tx) and the `research/iq-tx` branch (I/Q playback engine, LoRa)
+- [x] https://github.com/h0m3us3r/eSpDR: the original 80 Msps FPGA design (reference)
+
+## 5. Run it (Windows, from `S:\Personal_Projects\ESPOlivia`)
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Receiver (board B):
+
+```powershell
+espdr-rx                      # loads RX firmware into RAM (~8 s), starts rtl_tcp on 127.0.0.1:1234
+```
+
+SDR++: Source = RTL-TCP, host 127.0.0.1, port 1234, play, tune to 2350 MHz, NFM.
+
+Transmitter (board A), in a second terminal, naming board A's ports explicitly:
+
+```powershell
+espdr-tx --accept-licence -f 2350 -m fm --test-tone 1000 --duration 10 --port COMa --bridge-port COMb
+espdr-tx -f 2350 -m usb -i speech.wav --ppm <measured>   # SSB voice
+```
+
+With both boards plugged in, give each command its own `--port` (native) and `--bridge-port` (UART) or the tools will refuse ("several ... found").
+
+## 6. Status on this PC (2026-10-17)
+
+- [x] Windows 11, git 2.47, Python 3.13/3.14, usbipd-win present
+- [x] venv + tools installed; `espdr-rx --selftest` PASSED; `espdr-tx --dry-run` runs
+- [x] Boards: **A = COM4** (MAC C4:9E:7E:07:44:88), **B = COM5** (MAC C4:9E:7E:08:6F:10). ESP32-S3 QFN56 rev v0.2, 8 MB PSRAM, 40 MHz crystal. Native USB only (no UART bridge), loads without buttons via `usb-reset`
+- [x] **Receiver running on board A**: `espdr-rx --native --port COM4`, rtl_tcp 127.0.0.1:1234, tuned 2437 MHz, Wi-Fi visible ~30 dB over noise, survives reconnects
+- [ ] SDR++ not installed yet
+- [x] **TX -> RX loop works** (licence accepted by user): board B (COM5) sent FM, 1 kHz test tone, 2350 MHz, 10 s; board A (COM4) received it
+  (capture `captures/rx_2350.u8`, 250 ksps u8 I/Q): carrier exactly 10 s long, +11.6 dB rms, at +4..+8 kHz (combined crystal error),
+  drifting about -1.5 kHz over 10 s (thermal). FM demod over the first 5 s: **999 Hz tone, 26 dB over noise**
+- [ ] **Open issue: Windows USB throughput.** TX buffer drained 107 -> 0 ms in 5.6 s, then underruns (counter 255) and the tone fell apart
+  (the carrier stayed). RX dropped ~56% of samples during long runs ("units dropped by the ESP"). Both point to the native USB CDC path on
+  Windows being slower than on Linux. Next: try WSL2 + usbipd, or investigate usbser.sys buffering / write sizes
+
+## 8. Decision: native Windows only (proof of concept)
+
+WSL dropped: the VM creation error persisted even after the admin fixes and a reboot. The PoC goal (S3 transmits, other S3 receives and decodes) is already met on Windows.
+Run 2 (after the BOOT/RESET recovery): carrier exactly 10 s, +12.0 dB, offset -0.12 kHz; TX buffer empty after 2.1 s; RX again lost ~5.6M samples;
+FM demod shows a tone near 890 Hz (not 999 Hz) at 19-21 dB, likely distorted by the sample loss.
+
+| Run | TX firmware load | TX buffer empty at | Carrier | Tone while buffer OK | Tone after underrun | RX samples lost |
+|---|---|---|---|---|---|---|
+| 1 | yes | 5.6 s | 10 s, +11.6 dB | 999 Hz, 26 dB | 420 Hz junk | (start-up only) |
+| 2 | yes | 2.1 s | 10 s, +12.0 dB | (window overlapped underrun) | ~890 Hz | 5.64M / 40 s |
+| 3 | no (already in RAM) | 1.6 s | ~10 s, +11.6 dB | **999 Hz, 20 dB** | ~885 Hz | 5.65M / 40 s |
+
+Takeaway: the RF link is solid and repeatable; audio is correct exactly as long as the host keeps the TX buffer fed. The underrun artefact is consistent (~885 Hz).
+RX loss is very consistent (~23,500 units dropped per 40 s, about 56%), so it looks systematic rather than random.
+
+Known PoC limits: TX underruns after about 5 s and RX sample drops on long runs (Windows USB CDC throughput). Not investigated further.
+
+**Board recovery:** the firmware in the boards' flash runs TinyUSB (enumerates as 303a:4001) and ignores esptool's reset. To get back to the
+ROM loader (303a:1001): hold **BOOT**, tap **RESET**, release BOOT; then `espdr-rx --native --port COMx` / `espdr-tx --native --port COMy`.
+Optional: `espdr-rx --native --port COMx --flash` writes the receiver to flash so it boots straight into it.
+
+## 9. fldigi CW bridge: `espdr_fldigi.py` (work in progress)
+
+Found on the way: **`--update-rate 8000` streams with 0 underruns on Windows** (40000 underruns within 1.6-5.6 s). The Windows 1 ms timer and a
+1 MB serial buffer did not help (RX loss unchanged at ~56%).
+
+- [x] Program written: RX = rtl_tcp -> USB demod -> sound device / WAV; TX = fldigi audio -> CW keyer (envelope -> gain code, tone -> fixed offset)
+  at 8000 records/s; PTT from fldigi XML-RPC (`main.get_trx_state`)
+- [x] Offline checks: keyer tracks a 700 Hz tone (699 Hz); USB demod puts +700 Hz at 700 Hz audio, opposite sideband -93 dB
+- [x] fldigi 4.2.13 XML-RPC reachable (state RX). Set fldigi's Op Mode to **CW**
+- [x] Hardware: board B transmits with 0 underruns; board A receives the carrier
+- [x] **Bug fixed: TX never started.** The firmware turns the carrier on only once its ring holds `TX_PREFILL` = 4000 records
+  (`firmware/src/radio.c:637`); the bridge kept only 2400 in flight. Now 4800 (600 ms). Transmissions end "finished", full length, 0 underruns
+- [x] Gain keying verified: `scripts/gain_toggle.py` (code 64/127, 1 s each) gives ~20 dB on/off at the receiver; "T T" at 3 WPM via the bridge keys cleanly
+- [x] Receiver overload fixed: default `--rx-gain` is now 15 (60 overloads with the boards side by side, rms ~90 of 127)
+- [x] RX AGC decay is now per second (it was per socket read and filled CW spaces)
+- [x] **Frequency drift between boards: several kHz, run to run** (+7.1, -2.0, +5.2, -2.1 kHz from the dial within minutes). A fixed
+  `--tx-ppm` does not hold. `--rx-shift` retunes the receiver; `--selftest` prints the value to use ("To hear it at 700 Hz: --rx-shift ...")
+- [ ] At 6-12 WPM my own envelope decoders give inconclusive results (carrier drifts hundreds of Hz during a message; RX still loses ~59%
+  of samples). Next real test: **fldigi's CW decoder** (AFC, tracking) on the bridge's audio
+- [ ] MIXLINE still passes no audio (0.0000 rms on both inputs, tested three times)
+
+### fldigi test (VB-CABLE, call W4DQB/EXP)
+
+- [x] VB-CABLE loops back (CABLE Input -> CABLE Output). One cable is enough half-duplex: fldigi capture = CABLE Output, playback = CABLE Input;
+  bridge `--rx-out "CABLE Input" --tx-in "CABLE Output"` (RX audio muted while fldigi transmits)
+- [x] fldigi XML-RPC: state, mode (set to CW, 700 Hz), RX text all work; AFC needs the button (set_afc via XML-RPC is ignored)
+- [x] Bug fixed: `--tx-in` was not resolved through `find_device` (crashed with several "CABLE Output" devices)
+- [x] **Drift while transmitting: ~190-600 Hz/s, kHz per message** (-1190 -> +2014 Hz in one 17 s message). Added a receive AFC in the
+  bridge (`RxAfc`, on by default, `--afc-tone 700`): offline it holds a carrier drifting -824..+1247 Hz at 705-709 Hz audio, ignoring fixed spurs
+- [x] fldigi receives and decodes characters from board B through the bridge
+- [ ] **Decodes are wrong** at 15 and 5 WPM ("VVV DE W4DQB/EXP" -> `SBT**EUE7 I`, `RBT*E6TAEE E T`, `7 B ETG T D`)
+- [ ] Root cause open: **keying contrast at the receiver is ~4 dB at CW speeds** (80 ms gain toggles, `scripts/gain_toggle.py`),
+  ~20 dB with 1 s toggles. The firmware applies each record's gain immediately (`radio.c:707`), so either the chip's output does not follow
+  fast gain changes cleanly (a second line ~350 Hz below the carrier appears too) or the receive side smears it (~59% sample loss on Windows).
+  An independent receiver (RTL-SDR / HackRF / PlutoSDR with SDR++) would tell which
+- [x] **`--space-shift 12000` fixes the keying contrast**: during spaces the (weakest, -18 dB) carrier moves 12 kHz away, out of the receive
+  passband and AFC span. Received audio now shows clean `...-` for V. fldigi at 12 WPM decoded `4VI EI D USTBDE T TP` from
+  "VVV VVV DE W4DQB/EXP": V, DE and parts of the call come through. Note the spaces are a weak emission 12 kHz up (in band)
+- [ ] Remaining decode errors: set fldigi's CW speed to the sending speed (it starts at its own default and tracks), and the ~59% RX sample
+  loss still nicks elements
+- [ ] fldigi -> board B (TX path) not tested yet
+
+### Independent receiver check (ESP-WebSDR on a separate ESP32, 2394.250 MHz)
+
+- [x] RTL-SDR cannot reach 2350 MHz (tops out ~1.7 GHz); used ESP-WebSDR (snapshot spectrum/waterfall) instead, test moved to 2394.250 MHz
+- [ ] 1 s vs 80 ms gain toggles: hard to tell apart on the snapshot display
+- [x] 5 s solid carrier + "DE W4DQB/EXP" at 10 WPM (no space shift), sent twice: **CW keying with clear gaps seen** on the independent receiver
+- Conclusion (visual, moderate confidence): **board B keys properly; the keying is mostly lost on board A's receive path**, most likely the
+  ~59% Windows sample loss. Next: reduce or fix the RX loss (fewer bytes per sample, a narrower firmware decimation, or board A on Linux);
+  `--space-shift` remains a working mitigation meanwhile
+- Note: at 2394.250 the PLL puts the LO ~15 kHz below the dial; records carry +15.3 kHz, so a faint LO line near 2394.235 MHz is expected
+
+### RX sample loss on Windows: root cause
+
+- [x] **Measured: Windows' usbser.sys moves 0.275 MB/s** from the S3's USB-Serial/JTAG port (firmware NB_BENCH, both write modes; and
+  `scripts/usb_raw_bench.py` with raw reads of 4 KB..1 MB and driver buffers up to 4 MB: always 0.275). Linux: ~0.87 MB/s (author).
+  The receiver needs 0.5 MB/s (250 ksps x 2 bytes), so ~45% gets through: the host is not the bottleneck, the driver path is
+- [x] Firmware minimum rate is 250 ksps (`NB_SET_DECIM` 2..4, `firmware/src/stream.c:67`)
+- Options:
+  1. **Firmware: add decimation 8 (125 ksps = 250 KB/s, under the limit).** Taps come from `firmware/tools/design_taps.py`; also `dsp.c`
+     (tap/PIE selection), `stream.c` (range), host `rtltcp.SRC_RATES`. Needs ESP-IDF v5.5.3 to build. Plenty for CW (+-50 kHz)
+  2. WinUSB + libusb with several transfers in flight (Zadig): replaces the COM port, and both boards share VID:PID 303a:1001, so it
+     would break board B's firmware loading. Not recommended
+  3. Run board A's receiver on a Linux machine
+  4. Keep `--space-shift 12000` as the workaround
+
+### Fix: receiver firmware with decimation 16 (62.5 ksps)
+
+- [x] ESP-IDF **v5.5.3** at `S:\esp\esp-idf` (C: has little space); Xtensa GCC 14.2.0 via `idf_tools.py install xtensa-esp-elf` from
+  **PowerShell** (it refuses Git Bash) with `IDF_TOOLS_PATH=S:\esp\.espressif`; GNU make 4.4.1 via `scoop install make`.
+  Build from Git Bash (recipes need sed/awk):
+  ```bash
+  export PATH="/s/esp/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-esp-elf/bin:$PATH" IDF_PATH="S:/esp/esp-idf"
+  make -C repos/esp32-sdr-trx/firmware TX=0 NARROWBAND=1 BUILD=build-rx ESPTOOL="$PWD/.venv/Scripts/python.exe -m esptool"
+  ```
+- [x] Baseline (unmodified, tag v1.0.0-rc4, branch `decim8` (name kept; it now holds decim 16)) builds and runs on board A: same ~56% loss
+- [x] Firmware change (`decim16-firmware.patch`): R2 = 16 in `tools/design_taps.py` (81 taps, +-15 kHz, -47 dB stopband), `dsp.c` tap
+  selection, `dsp.h` output count and wrap constant (4294967040 = 768 x 5592405: keeps the block phase mod 2/3/4/16), `stream.c` range.
+  R2 = 8 (125 ksps) was tried first: verified on chip (SIMD = C), but **still lost 18.6%** (270 of 275 KB/s); RAM fits only one extra table
+- [x] On chip: stock R2 = 4 still passes SIMD-vs-C (0 bytes differ). R2 = 16 cannot be encoded in NB_DSPBENCH's 4-bit field; it runs the
+  same code as R2 = 8 (same 81-tap length), which passed
+- [x] **Result: 0 samples lost in 20 s at 62.5 ksps** (was ~56% at 250 ksps). Known carrier at the expected offset, clean 1 s keying
+- [x] At 62.5 ksps the 8-bit output clipped (70% of key-down samples) with RX gain 15: use **gain 0** (0% clipping, 15.6 dB keying contrast)
+- [x] Host (`espdr-windows.patch`): `espdr-rx --decim 16`, `rtltcp.SRC_RATES[16]`; image saved as `release/esp32-sdr-trx-rx-decim16.bin`
+- [x] Bridge: `--decim 16 --rx-image ...` (RX gain defaults to 0 then); AFC scales its FFT (66 ms) and ignores signals >12 dB below the
+  recent peak, so it no longer locks onto the space carrier (it did once on air, at ~16 s)
+- [ ] fldigi decode still poor (`R E<AS>T T U T *ISTT E<AS>`), but the audio fldigi hears (recorded from CABLE Output: only 10 ms of
+  gaps) decodes with a simple timing decoder as `?EUVV VVV DE W4DQB/EIUI E?`: the call comes through. Remaining: dit lengths vary
+  40-110 ms (should be 100); fldigi's own speed tracking / settings (set its CW WPM to the sending speed)
+
+### fldigi decoder tuning
+
+- [x] Via XML-RPC toggles: squelch off (was on at 30), AFC on (`set_*` calls are ignored; `toggle_*` work). Bandwidth, WPM and speed
+  tracking are GUI-only: user set 250 Hz, 12 WPM, tracking 8-20, SOM on
+- [x] Live RX test: the audio is now essentially perfect (dits 105 ms, dahs 305 ms, gaps 95 ms; a simple decoder reads
+  `?IUVV VVV DE W4DQB/EXP`), but fldigi decoded `TVV ZUDE W$`
+- [x] **fldigi also garbles that recorded audio (`.V DE$`) and a perfect synthetic CW signal (`$ <BT>B`)** played into CABLE Input:
+  the radio chain is fine; the problem is fldigi's audio input or decoder configuration
+- [x] SOM off, 48 kHz (user): fldigi still garbles the perfect synthetic signal (`A AE E`; with a 2 s lead tone `T V)*DEP`)
+- [x] **Test frequency is now 2394.250 MHz** (where the user's ESP-WebSDR watches; experimental work). There the PLL puts the LO
+  14.6 kHz below the dial, so `--space-shift` now picks the direction that fits the records' +-19.2 kHz reach (spaces go -12 kHz)
+- [x] Self-test sends a **2 s lead tone** (`--lead`, default 2) before the message: the first characters now decode cleanly.
+  2394.250 run: simple decoder `[2s tone] V I U VV DE W4DQB/EXP` (one dropout); fldigi `W V U<AS>/G`
+- [ ] fldigi itself: needs a look at its window (waterfall trace, displayed WPM, status bar) while the synthetic signal plays
+
+### Own CW station instead of fldigi: `espdr_cw_tk.py` (Tk window) + `cw_decoder.py`
+
+- [x] `cw_decoder.py`: streaming decoder (5 ms envelope at the AFC tone, peak/floor trackers, adaptive dot length, bridges drop-outs
+  < 0.35 dot, shows lead/tune carriers as `[carrier]`). Offline: synthetic 8/12 WPM perfect (light and heavy noise), 18/25 WPM after
+  1-2 characters; real recordings: all decode the call (2394.250 run: `VSV VVV DE W4DQB/EXP`)
+- [x] Window: frequency selector (2320.005-2449.995 MHz, Apply retunes **both** boards), RX/TX indicator, key light;
+  Receive/decode pane (speed, signal, tone); Transmit/encode (text + live Morse preview, Send, WPM, lead tone, space shift, Call,
+  Send ID, Tune 2 s). Board A keeps listening while B sends, so your transmission is decoded in the window
+- [x] Bridge: `RtlClient.retune()`, `RxAfc.reset()`, `Transmitter.set_dial()` (replans LO and space direction between transmissions)
+- [x] Offline window test: decoded `VVV DE W4DQB/EXP`, preview correct, out-of-band frequency refused
+- [x] Live: 2394.250 `VV DE W4DQB/EXP`; retune to 2394.300 and back worked; at 2394.300 `E[carrier]DE I*DQ /EXP` (cause not pinned:
+  AFC just reset by the retune, or the other space direction there)
+- [x] **Monitor**: tickbox + Vol slider in Receive/decode plays the receive audio (noise and CW) on the default speakers
+  (`--monitor-device` to pick another). Confirmed by the user
+- (the first web-interface attempt was cut off: `espdr_cw.py.incomplete`, not used)
+
+```powershell
+.\.venv\Scripts\python.exe espdr_cw_tk.py --call W4DQB/EXP
+```
+
+Current best command:
+
+```powershell
+python espdr_fldigi.py --dial 2350.000 --rx-port COM4 --tx-port COM5 --decim 16 --rx-image release/esp32-sdr-trx-rx-decim16.bin --space-shift 12000 --rx-out "CABLE Input" --tx-in "CABLE Output"
+```
+- [ ] **Needs a virtual audio cable pair** for fldigi (MIXLINE does not loop back): e.g. VB-Audio VB-CABLE + a second cable
+
+Planned use once the cables exist (fldigi: audio capture = cable 1 output, playback = cable 2 input):
+
+```powershell
+python espdr_fldigi.py --dial 2350.000 --rx-port COM4 --tx-port COM5 --rx-gain 15 --rx-out "CABLE Input" --tx-in "CABLE-B Output"
+python espdr_fldigi.py --dial 2350.000 --rx-port COM4 --tx-port COM5 --selftest "TEST" --wpm 8 --rx-wav captures\cw.wav   # no fldigi needed
+```
+
+## 10. WSL2 attempt (abandoned)
+
+- [x] Found the boards' UART ports: FTDI 0403:6001, **board A = COM9** (serial A5069RR4A), **board B = COM10**. Both are in the tool's bridge list
+- [ ] Native USB ports (COM4/COM5) disappeared from Windows after the receiver was stopped; the tools need native + UART per board
+- [ ] `wsl --install -d Ubuntu` fails at VM creation: `Wsl/InstallDistro/Service/RegisterDistro/CreateVm/0x8007273f`
+  (virtualization on, hypervisor present, vmcompute running, no third-party Winsock providers; `wsl --shutdown` + retry did not help)
+- [ ] Fix needs an **admin** PowerShell, then a reboot:
+  `dism /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart`, `dism /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart`,
+  `netsh winsock reset`, `wsl --update`
+- [ ] After that: `usbipd bind --busid <id>` (admin, once per device), then `usbipd attach --wsl --busid <id>` for all 4 ports
+
+## 7. Windows fixes (local patch: `espdr-windows.patch`, applied to `.venv`)
+
+1. **Firmware died on every disconnect.** Upstream relies on Linux dropping DTR+RTS together on close; Windows drops them one at a time,
+   and DTR=0/RTS=1 resets the S3 into its ROM loader. Fix: `nb.open_link` opens the port with DTR/RTS deasserted, so the lines never change.
+2. **`--native` refused with two boards attached.** Fix: `board.load_ram` honours `--port` in native mode.
+
+Re-installing the wheel wipes these: re-apply with `patch -p0` or copy the edited files. Worth reporting upstream (jochenhammes/esp32-sdr-trx).
+
+Use with two boards: always pass `--native --port COMx`:
+
+```powershell
+espdr-rx --native --port COM4                                                  # board A: receiver
+espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --duration 10   # board B: transmitter
+```

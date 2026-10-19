@@ -1,0 +1,354 @@
+"""espdr_cw_tk: a CW station for two ESP32-S3 boards (esp32-sdr-trx) in a Tk window, with its own Morse decoder.
+
+Receive: board A runs espdr-rx (62.5 ksps with the decimation-16 firmware); espdr_fldigi's chain (USB demodulator, AFC that keeps
+the carrier at 700 Hz) feeds cw_decoder. Transmit: typed text is keyed on board B, after an optional steady lead tone, with the
+carrier moved away during spaces (the chip's key-up is only 18 dB down). Board A keeps listening while B sends, so your own
+transmission shows up decoded: an end-to-end check.
+
+Transmitting needs an amateur radio licence (espdr-tx's licence confirmation, `espdr-tx --accept-licence`, once). The firmware
+only transmits inside 2320 .. 2450 MHz.
+
+  python espdr_cw_tk.py --call W4DQB/EXP
+"""
+import argparse
+import queue
+import subprocess
+import sys
+import threading
+import tkinter as tk
+from tkinter import ttk
+
+import numpy as np
+
+import espdr_fldigi as br
+from cw_decoder import MORSE, CwDecoder
+
+BAND_MHZ = (2320.005, 2449.995)
+ENCODE = {ch: code for code, ch in MORSE.items() if len(ch) == 1}
+
+
+class Radio:
+    """The two boards behind a small interface. Text and log lines come out through queues; nothing here touches Tk."""
+
+    def __init__(self, args):
+        self.a = args
+        self.text = queue.Queue()               # decoded characters
+        self.log = queue.Queue()                # status lines
+        self.decoder = CwDecoder(rate=br.AUDIO_RATE, tone=args.tone, wpm=args.wpm, emit=self.text.put)
+        self.rx = self.tx = self.server = None
+        self.monitor = None                     # br.AudioOut while the monitor is on
+        self.volume = 0.5
+        self.ready = False
+        self.sending = False
+        self.dial_mhz = args.dial
+
+    def start(self):
+        """Loads the firmware and connects both boards (takes some seconds: run it off the Tk thread)."""
+        a = self.a
+        try:
+            br.RTL_RATE = br.DECIM_RATES[a.decim]
+            self.log.put(f"starting the receiver on {a.rx_port} ...")
+            cmd = [sys.executable, "-c", "from espdr.cli_rx import main; main()", "--native", "--port", a.rx_port,
+                   "--gain", str(a.rx_gain), "--ppm", str(a.rx_ppm), "--listen", a.rtl, "--decim", str(a.decim)]
+            if a.rx_image:
+                cmd += ["--image", a.rx_image]
+            self.server = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            for line in self.server.stdout:
+                if "rtl_tcp server" in line:
+                    break
+                if "espdr-rx:" in line or "Error" in line:
+                    raise RuntimeError(line.strip())
+            threading.Thread(target=lambda: [None for _ in self.server.stdout], daemon=True).start()
+            host, _, port = a.rtl.rpartition(":")
+            self.rx = br.RtlClient((host, int(port)), self.dial_mhz * 1e6, self._audio, threading.Event())
+            self.rx.afc = br.RxAfc(a.tone)
+            self.rx.start()
+            self.log.put(f"receiving on {self.dial_mhz:.3f} MHz")
+            if a.tx_port:
+                self.log.put(f"starting the transmitter on {a.tx_port} ...")
+                self.tx = br.Transmitter(a.tx_port, self.dial_mhz * 1e6, a.tx_ppm, a.power, a.tone, a.space_shift)
+                self.space_hz = self.tx.space_hz
+            self.ready = True
+            self.log.put("ready" + ("" if self.tx else " (receive only)"))
+        except (RuntimeError, SystemExit, OSError) as e:
+            self.log.put(f"start failed: {e}")
+
+    def _audio(self, x):
+        """Receive audio (48 kHz) from the RX thread: to the decoder, and to the speakers while the monitor is on."""
+        self.decoder.process(x)
+        m = self.monitor
+        if m is not None:
+            m.write((np.asarray(x) * self.volume).astype(np.float32))
+
+    def set_monitor(self, on):
+        """Plays the receive audio (noise and CW) on the sound device --monitor-device (default: Windows' default output)."""
+        if on and self.monitor is None:
+            try:
+                self.monitor = br.AudioOut(br.find_device(self.a.monitor_device, False) if self.a.monitor_device else None)
+            except Exception as e:                               # noqa: BLE001 - shown in the window
+                return f"monitor: {e}"
+        elif not on and self.monitor is not None:
+            m, self.monitor = self.monitor, None
+            m.close()
+        return None
+
+    def set_frequency(self, mhz):
+        if self.sending:
+            return "wait until the transmission ends"
+        if not BAND_MHZ[0] <= mhz <= BAND_MHZ[1]:
+            return f"outside {BAND_MHZ[0]:.3f} .. {BAND_MHZ[1]:.3f} MHz"
+        if self.tx:
+            try:
+                self.tx.set_dial(mhz * 1e6, abs(self.space_hz))
+            except ValueError as e:
+                return str(e)
+            self.space_hz = self.tx.space_hz
+        if self.rx:
+            self.rx.retune(mhz * 1e6)
+        self.dial_mhz = mhz
+        return None
+
+    def send(self, text, wpm, lead_s, shift_spaces):
+        """Starts one transmission in the background: a lead tone (if lead_s), then the Morse for `text` (if any)."""
+        if not self.tx:
+            return "no transmitter"
+        if self.sending:
+            return "already transmitting"
+        self.sending = True
+        threading.Thread(target=self._send, args=(text, wpm, lead_s, shift_spaces), daemon=True).start()
+        return None
+
+    def _send(self, text, wpm, lead_s, shift_spaces):
+        rate, tone = br.TX_RATE, self.a.tone
+        parts = []
+        if lead_s:
+            t = np.arange(int(lead_s * rate)) / rate
+            parts.append(0.5 * np.minimum(1, np.minimum(t, t[::-1]) / 0.005) * np.sin(2 * np.pi * tone * t))
+            if text:
+                parts.append(np.zeros(rate // 2))
+        if text:
+            parts.append(br.morse_audio(text, wpm=wpm, tone=tone))
+        audio = np.concatenate(parts)
+        self.tx.space_hz = self.space_hz if shift_spaces else 0.0
+        self.log.put(f"TX {self.dial_mhz:.3f} MHz: " + (repr(text) + f" at {wpm:g} WPM" if text else f"{lead_s:g} s tone"))
+        try:
+            self.tx.transmit((audio[i:i + 160] for i in range(0, len(audio), 160)), threading.Event())
+        except Exception as e:                                   # noqa: BLE001 - shown in the window
+            self.log.put(f"transmit failed: {e}")
+        finally:
+            self.sending = False
+
+    def close(self):
+        self.set_monitor(False)
+        if self.rx:
+            self.rx.stop.set()
+        if self.server:
+            self.server.terminate()
+
+
+class Window:
+    def __init__(self, root, radio, args):
+        self.root, self.radio, self.args = root, radio, args
+        root.title("ESP CW Station")
+        root.minsize(640, 520)
+        pad = dict(padx=8, pady=4)
+
+        top = ttk.Frame(root)
+        top.pack(fill="x", **pad)
+        ttk.Label(top, text="Frequency (MHz)").pack(side="left")
+        self.freq = tk.StringVar(value=f"{args.dial:.3f}")
+        spin = ttk.Spinbox(top, from_=BAND_MHZ[0], to=BAND_MHZ[1], increment=0.001, format="%.3f", width=10,
+                           textvariable=self.freq)
+        spin.pack(side="left", padx=4)
+        spin.bind("<Return>", lambda e: self.apply_freq())
+        ttk.Button(top, text="Apply", command=self.apply_freq).pack(side="left")
+        self.mode = tk.Label(top, text="OFF", width=5, font=("Segoe UI", 14, "bold"), fg="white", bg="gray40")
+        self.mode.pack(side="right")
+        self.keylight = tk.Canvas(top, width=18, height=18, highlightthickness=0)
+        self.keylight.pack(side="right", padx=8)
+        self.keydot = self.keylight.create_oval(2, 2, 16, 16, fill="gray70", outline="")
+        ttk.Label(top, text="key").pack(side="right")
+
+        rxf = ttk.LabelFrame(root, text="Receive / decode")
+        rxf.pack(fill="both", expand=True, **pad)
+        self.rxtext = tk.Text(rxf, height=12, wrap="word", font=("Consolas", 13), state="disabled")
+        sb = ttk.Scrollbar(rxf, command=self.rxtext.yview)
+        self.rxtext.configure(yscrollcommand=sb.set)
+        self.rxtext.tag_configure("tx", foreground="#c2410c")
+        self.rxtext.tag_configure("note", foreground="gray50")
+        sb.pack(side="right", fill="y")
+        self.rxtext.pack(fill="both", expand=True, padx=4, pady=4)
+        row = ttk.Frame(rxf)
+        row.pack(fill="x", padx=4, pady=(0, 4))
+        self.stats = ttk.Label(row, text="speed - WPM   signal - dB   tone - Hz")
+        self.stats.pack(side="left")
+        ttk.Button(row, text="Clear", command=self.clear_rx).pack(side="right")
+        self.vol = tk.DoubleVar(value=radio.volume * 100)
+        ttk.Scale(row, from_=0, to=100, variable=self.vol, length=110,
+                  command=lambda v: setattr(radio, "volume", float(v) / 100)).pack(side="right", padx=(4, 12))
+        ttk.Label(row, text="Vol").pack(side="right")
+        self.mon = tk.BooleanVar(value=False)
+        ttk.Checkbutton(row, text="Monitor", variable=self.mon, command=self.toggle_monitor).pack(side="right", padx=(12, 6))
+
+        txf = ttk.LabelFrame(root, text="Transmit / encode")
+        txf.pack(fill="x", **pad)
+        line = ttk.Frame(txf)
+        line.pack(fill="x", padx=4, pady=4)
+        self.msg = tk.StringVar()
+        self.msg.trace_add("write", lambda *_: self.preview())
+        entry = ttk.Entry(line, textvariable=self.msg, font=("Consolas", 13))
+        entry.pack(side="left", fill="x", expand=True)
+        entry.bind("<Return>", lambda e: self.send())
+        self.sendbtn = ttk.Button(line, text="Send", command=self.send)
+        self.sendbtn.pack(side="left", padx=(6, 0))
+        self.code = ttk.Label(txf, text="", font=("Consolas", 11), foreground="gray40")
+        self.code.pack(fill="x", padx=4)
+        opts = ttk.Frame(txf)
+        opts.pack(fill="x", padx=4, pady=4)
+        ttk.Label(opts, text="WPM").pack(side="left")
+        self.wpm = tk.StringVar(value=f"{args.wpm:g}")
+        ttk.Spinbox(opts, from_=5, to=30, increment=1, width=4, textvariable=self.wpm).pack(side="left", padx=(4, 12))
+        self.lead = tk.BooleanVar(value=args.lead > 0)
+        ttk.Checkbutton(opts, text=f"{args.lead or 2:g} s lead tone", variable=self.lead).pack(side="left")
+        self.shift = tk.BooleanVar(value=args.space_shift != 0)
+        ttk.Checkbutton(opts, text="Shift carrier in spaces", variable=self.shift).pack(side="left", padx=12)
+        ttk.Label(opts, text="Call").pack(side="left")
+        self.call = tk.StringVar(value=args.call or "")
+        ttk.Entry(opts, textvariable=self.call, width=12).pack(side="left", padx=4)
+        ttk.Button(opts, text="Send ID", command=self.send_id).pack(side="left", padx=4)
+        ttk.Button(opts, text="Tune 2 s", command=self.tune).pack(side="left")
+
+        self.status = ttk.Label(root, text="starting ...", relief="sunken", anchor="w")
+        self.status.pack(fill="x", side="bottom")
+        root.protocol("WM_DELETE_WINDOW", self.close)
+        self.poll()
+
+    # -- receive side
+    def append(self, s, tag=None):
+        self.rxtext.configure(state="normal")
+        self.rxtext.insert("end", s, tag)
+        self.rxtext.see("end")
+        self.rxtext.configure(state="disabled")
+
+    def toggle_monitor(self):
+        err = self.radio.set_monitor(self.mon.get())
+        if err:
+            self.mon.set(False)
+            self.say(err)
+        else:
+            self.say("monitor on" if self.mon.get() else "monitor off")
+
+    def clear_rx(self):
+        self.rxtext.configure(state="normal")
+        self.rxtext.delete("1.0", "end")
+        self.rxtext.configure(state="disabled")
+
+    # -- transmit side
+    def preview(self):
+        words = self.msg.get().upper().split()
+        self.code.configure(text="  /  ".join(" ".join(ENCODE.get(c, "?") for c in w) for w in words))
+
+    def _wpm(self):
+        try:
+            return min(30.0, max(5.0, float(self.wpm.get())))
+        except ValueError:
+            return self.args.wpm
+
+    def _start_tx(self, text, lead_s):
+        text = " ".join(text.upper().split())
+        bad = sorted({c for c in text if c != " " and c not in ENCODE})
+        if bad:
+            self.say("no Morse for: " + " ".join(bad))
+            return False
+        wpm = self._wpm()
+        self.radio.decoder.set_wpm(wpm)              # we hear ourselves: start the decoder at the right speed
+        err = self.radio.send(text, wpm, lead_s, self.shift.get())
+        if err:
+            self.say(err)
+            return False
+        self.append(("\n" if text else "") + (f"[TX] {text}\n" if text else "[TX tune]\n"), "tx")
+        return True
+
+    def send(self):
+        if self._start_tx(self.msg.get(), self.args.lead if self.lead.get() else 0):
+            self.msg.set("")
+
+    def send_id(self):
+        call = self.call.get().strip().upper()
+        if not call:
+            self.say("enter your call sign first")
+            return
+        self._start_tx(f"DE {call}", self.args.lead if self.lead.get() else 0)
+
+    def tune(self):
+        self._start_tx("", 2.0)
+
+    def apply_freq(self):
+        try:
+            mhz = round(float(self.freq.get()), 6)
+        except ValueError:
+            self.say("not a frequency")
+            return
+        err = self.radio.set_frequency(mhz)
+        if err:
+            self.say(err)
+            return
+        self.append(f"\n[{mhz:.3f} MHz]\n", "note")
+        self.say(f"tuned to {mhz:.3f} MHz")
+
+    # -- housekeeping
+    def say(self, s):
+        self.status.configure(text=s)
+
+    def poll(self):
+        r = self.radio
+        while not r.text.empty():
+            self.append(r.text.get_nowait())
+        while not r.log.empty():
+            self.say(r.log.get_nowait())
+        if r.sending:
+            self.mode.configure(text="TX", bg="#dc2626")
+        elif r.ready:
+            self.mode.configure(text="RX", bg="#16a34a")
+        self.sendbtn.configure(state="disabled" if r.sending or not r.tx else "normal")
+        d = r.decoder
+        self.keylight.itemconfigure(self.keydot, fill="#f59e0b" if d.key else "gray70")
+        afc = r.rx.afc if r.rx else None
+        tone = f"{afc.target:.0f}" if afc and afc.locked else "-"
+        self.stats.configure(text=f"speed {d.wpm:4.1f} WPM   signal {d.snr_db:4.1f} dB   tone {tone} Hz")
+        self.root.after(100, self.poll)
+
+    def close(self):
+        self.radio.close()
+        self.root.destroy()
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--dial", type=float, default=2394.250, help="start frequency in MHz (default 2394.250)")
+    p.add_argument("--rx-port", default="COM4", help="receiver board's native USB port (default COM4)")
+    p.add_argument("--tx-port", default="COM5", help="transmitter board's native USB port (default COM5; '' for receive only)")
+    p.add_argument("--decim", type=int, choices=sorted(br.DECIM_RATES), default=16, help="receiver decimation (default 16)")
+    p.add_argument("--rx-image", default="release/esp32-sdr-trx-rx-decim16.bin", help="receiver firmware image")
+    p.add_argument("--rx-gain", type=int, default=0, help="receiver gain selector (default 0: the boards are close)")
+    p.add_argument("--rx-ppm", type=float, default=0.0)
+    p.add_argument("--tx-ppm", type=float, default=0.0)
+    p.add_argument("--power", type=float, default=0.0, help="transmit power in dB (0 .. -17.9)")
+    p.add_argument("--tone", type=float, default=700.0, help="CW tone / AFC target in Hz (default 700)")
+    p.add_argument("--space-shift", type=float, default=12000.0, help="carrier shift during spaces in Hz (default 12000)")
+    p.add_argument("--wpm", type=float, default=12.0, help="sending speed and the decoder's starting speed (default 12)")
+    p.add_argument("--lead", type=float, default=2.0, help="lead tone before each message in seconds (default 2)")
+    p.add_argument("--call", help="your call sign, for Send ID")
+    p.add_argument("--rtl", default="127.0.0.1:1234", help="address for espdr-rx's rtl_tcp server")
+    p.add_argument("--monitor-device", help="sound device for the monitor (name part or number; default: Windows' default output)")
+    args = p.parse_args()
+
+    radio = Radio(args)
+    root = tk.Tk()
+    Window(root, radio, args)
+    threading.Thread(target=radio.start, daemon=True).start()
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
