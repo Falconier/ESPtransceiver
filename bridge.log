@@ -1,0 +1,11 @@
+03:31:11 RX: espdr-rx 1.0.0-rc4: receiver on COM4; rtl_tcp server on 127.0.0.1:1234, 250 ksps, ppm 0. In SDR++ choose RTL-TCP and press play. Ctrl-C ends.
+03:31:11 RX: tuned 2349.997087 MHz on 127.0.0.1:1234
+03:31:12 TX: board on COM5, LO 2349.999847 MHz nominal, dial offset +153 Hz, power 0 dB
+03:31:12 running; Ctrl-C ends
+03:31:25 fldigi: RX
+03:32:21 fldigi: OTHER
+03:32:21 fldigi: RX
+03:32:51 fldigi: OTHER
+03:32:51 fldigi: RX
+03:33:03 fldigi: OTHER
+03:33:03 fldigi: RX

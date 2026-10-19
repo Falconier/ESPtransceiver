@@ -1,0 +1,5 @@
+espdr-rx 1.0.0-rc4: receiver on COM4; rtl_tcp server on 127.0.0.1:1234, 250 ksps, ppm 0. In SDR++ choose RTL-TCP and press play. Ctrl-C ends.
+client 127.0.0.1:61254 connected
+tuned 2350.000000 MHz (LO 2349.999847 MHz, fine shift -153 Hz), gain 15
+client left (dropped 0 blocks)
+1131882 samples lost in this run (4707 units dropped by the ESP)

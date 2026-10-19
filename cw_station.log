@@ -1,0 +1,15 @@
+20:37:40 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+20:37:40 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+20:37:40 RX: tuned 2394.250000 MHz on 127.0.0.1:1234
+20:37:40 TX: board on COM5, power 0 dB
+20:39:00 TX: off (finished; underruns 0, tone 700 Hz)
+20:40:50 TX: off (finished; underruns 0, tone 700 Hz)
+20:41:17 TX: off (finished; underruns 0, tone 700 Hz)
+20:42:40 TX: off (finished; underruns 0, tone 700 Hz)
+20:42:56 TX: off (finished; underruns 0, tone 700 Hz)
+20:42:59 TX: off (finished; underruns 0, tone 700 Hz)
+20:43:03 TX: off (finished; underruns 0, tone 700 Hz)
+20:43:15 TX: off (finished; underruns 0, tone 700 Hz)
+20:43:24 TX: off (finished; underruns 0, tone 700 Hz)
+20:43:35 TX: off (finished; underruns 0, tone 700 Hz)
+20:51:07 TX: off (finished; underruns 0, tone 700 Hz)

@@ -1,0 +1,170 @@
+diff --git a/firmware/protocol/narrowband.h b/firmware/protocol/narrowband.h
+index 66ee325..c17936d 100644
+--- a/firmware/protocol/narrowband.h
++++ b/firmware/protocol/narrowband.h
+@@ -27,7 +27,7 @@
+ #define NB_FORMAT_CS16 0
+ #define NB_FORMAT_CS8 1
+ 
+-#define NB_SET_DECIM 29    /* R2: 2 (500 ksps), 3 (333 ksps) or 4 (250 ksps) */
++#define NB_SET_DECIM 29    /* R2: 2 (500 ksps), 3 (333 ksps), 4 (250 ksps) or 16 (62.5 ksps) */
+ #define NB_SET_FORMAT 30   /* NB_FORMAT_* */
+ #define NB_SET_OUTSHIFT 31 /* extra right shift of the output, 0..12 */
+ #define NB_BENCH 32        /* USB throughput test: seconds (0: until a byte arrives) | write mode << 16 (0 the stream's own
+diff --git a/firmware/src/dsp.c b/firmware/src/dsp.c
+index e20f68b..abf7f2c 100644
+--- a/firmware/src/dsp.c
++++ b/firmware/src/dsp.c
+@@ -181,13 +181,17 @@ unsigned DSP_ATTR DSP_FUNC(const dsp_config *cfg, const uint32_t *cur, const uin
+                            unsigned count, uint32_t start, int have_prev, uint8_t *out, void (*idle)(void))
+ {
+     const unsigned r2 = cfg->r2;
+-    const unsigned taps = r2 == 2 ? DSP_TAPS_R2_2 : r2 == 3 ? DSP_TAPS_R2_3 : DSP_TAPS_R2_4;
+-    const int16_t *h = r2 == 2 ? dsp_taps_r2_2 : r2 == 3 ? dsp_taps_r2_3 : dsp_taps_r2_4;
++    const unsigned taps = r2 == 2 ? DSP_TAPS_R2_2 : r2 == 3 ? DSP_TAPS_R2_3 : r2 == 4 ? DSP_TAPS_R2_4 : DSP_TAPS_R2_16;
++    const int16_t *h = r2 == 2 ? dsp_taps_r2_2 : r2 == 3 ? dsp_taps_r2_3 : r2 == 4 ? dsp_taps_r2_4 : dsp_taps_r2_16;
+ #ifdef __XTENSA__
+     const int16_t *pie_taps = r2 == 2   ? &dsp_taps_pie_r2_2[0][0]
+                               : r2 == 3 ? &dsp_taps_pie_r2_3[0][0]
+-                                        : &dsp_taps_pie_r2_4[0][0];
+-    const unsigned pie_vecs = r2 == 2 ? DSP_PIE_VECS_R2_2 : r2 == 3 ? DSP_PIE_VECS_R2_3 : DSP_PIE_VECS_R2_4;
++                              : r2 == 4 ? &dsp_taps_pie_r2_4[0][0]
++                                        : &dsp_taps_pie_r2_16[0][0];
++    const unsigned pie_vecs = r2 == 2   ? DSP_PIE_VECS_R2_2
++                              : r2 == 3 ? DSP_PIE_VECS_R2_3
++                              : r2 == 4 ? DSP_PIE_VECS_R2_4
++                                        : DSP_PIE_VECS_R2_16;
+ #endif
+     const dsp_geometry g = dsp_geom(start, count, r2);
+ 
+diff --git a/firmware/src/dsp.h b/firmware/src/dsp.h
+index d52ac3a..f85c85a 100644
+--- a/firmware/src/dsp.h
++++ b/firmware/src/dsp.h
+@@ -8,7 +8,7 @@
+ #define DSP_MAX_OUTPUTS 512u /* per unit, with R2 = 2 and 16288-pair units */
+ 
+ typedef struct {
+-    unsigned r2;     /* 2, 3 or 4 */
++    unsigned r2;     /* 2, 3, 4 or 16 */
+     unsigned format; /* 0: int16 I,Q   1: int8 I,Q */
+     unsigned shift;  /* extra right shift of the output */
+ } dsp_config;
+@@ -22,10 +22,10 @@ typedef struct {
+ } dsp_geometry;
+ 
+ /*
+- * The pair index since the start of a run wraps at DSP_START_WRAP instead of 2^32: it is a multiple of 16 * 12, so the
+- * block number keeps its phase modulo 2, 3 and 4 across the wrap (a power-of-two wrap would shift the R2 = 3 phase).
++ * The pair index since the start of a run wraps at DSP_START_WRAP instead of 2^32: it is a multiple of 16 * 48, so the
++ * block number keeps its phase modulo 2, 3, 4 and 16 across the wrap (a power-of-two wrap would shift the R2 = 3 phase).
+  */
+-#define DSP_START_WRAP 4294967232u /* 192 * 22369621 */
++#define DSP_START_WRAP 4294967040u /* 768 * 5592405 */
+ 
+ static inline __attribute__((always_inline)) uint32_t dsp_advance(uint32_t start, unsigned count)
+ {
+@@ -73,7 +73,7 @@ static inline __attribute__((always_inline)) unsigned dsp_outputs(const dsp_conf
+     uint32_t n = g.nb - g.skip + cfg->r2 - 1u; /* ceil((nb - skip) / r2); n < 2^16 */
+     if (cfg->r2 == 3)
+         return (n * 0xAAABu) >> 17;
+-    return n >> (cfg->r2 == 2 ? 1 : 2);
++    return n >> (cfg->r2 == 2 ? 1 : cfg->r2 == 4 ? 2 : 4);
+ }
+ 
+ /*
+diff --git a/firmware/src/dsp_taps.h b/firmware/src/dsp_taps.h
+index 1962ef3..87c2622 100644
+--- a/firmware/src/dsp_taps.h
++++ b/firmware/src/dsp_taps.h
+@@ -8,6 +8,8 @@
+ #define DSP_PIE_VECS_R2_3 9
+ #define DSP_TAPS_R2_4 73
+ #define DSP_PIE_VECS_R2_4 10
++#define DSP_TAPS_R2_16 81
++#define DSP_PIE_VECS_R2_16 11
+ 
+ #ifdef DSP_TAPS_EXTERN
+ extern const int16_t dsp_taps_r2_2[41];
+@@ -16,6 +18,8 @@ extern const int16_t dsp_taps_r2_3[61];
+ extern const int16_t dsp_taps_pie_r2_3[8][72] __attribute__((aligned(16)));
+ extern const int16_t dsp_taps_r2_4[73];
+ extern const int16_t dsp_taps_pie_r2_4[8][80] __attribute__((aligned(16)));
++extern const int16_t dsp_taps_r2_16[81];
++extern const int16_t dsp_taps_pie_r2_16[8][88] __attribute__((aligned(16)));
+ /* CIC4/16 as a 64-tap FIR over x[16(j-3)..16j+15], oldest sample first */
+ extern const int16_t dsp_cic_taps[64] __attribute__((aligned(16)));
+ #else
+@@ -86,6 +90,31 @@ const int16_t dsp_taps_pie_r2_4[8][80] __attribute__((aligned(16))) = {
+     {0, 0, 0, 0, 0, 0, 0, 5, 10, 12, 5, -12, -31, -39, -21, 22, 70, 89, 53, -35, -133, -175, -112, 50, 232, 316, 214, -64, -383, -542, -388, 72, 625, 933, 716, -60, -1080, -1767, -1528, -62, 2435, 5270, 7509, 8359, 7509, 5270, 2435, -62, -1528, -1767, -1080, -60, 716, 933, 625, 72, -388, -542, -383, -64, 214, 316, 232, 50, -112, -175, -133, -35, 53, 89, 70, 22, -21, -39, -31, -12, 5, 12, 10, 5},
+ };
+ 
++const int16_t dsp_taps_r2_16[81] = {
++    1, 0, -2, -6, -12, -20, -30, -43,
++    -58, -75, -94, -114, -134, -152, -169, -181,
++    -189, -188, -179, -160, -128, -83, -24, 50,
++    138, 241, 357, 484, 621, 766, 914, 1064,
++    1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878,
++    1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351,
++    1210, 1064, 914, 766, 621, 484, 357, 241,
++    138, 50, -24, -83, -128, -160, -179, -188,
++    -189, -181, -169, -152, -134, -114, -94, -75,
++    -58, -43, -30, -20, -12, -6, -2, 0,
++    1,
++};
++
++const int16_t dsp_taps_pie_r2_16[8][88] __attribute__((aligned(16))) = {
++    {1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0, 0, 0, 0, 0, 0, 0},
++    {0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0, 0, 0, 0, 0, 0},
++    {0, 0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0, 0, 0, 0, 0},
++    {0, 0, 0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0, 0, 0, 0},
++    {0, 0, 0, 0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0, 0, 0},
++    {0, 0, 0, 0, 0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0, 0},
++    {0, 0, 0, 0, 0, 0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1, 0},
++    {0, 0, 0, 0, 0, 0, 0, 1, 0, -2, -6, -12, -20, -30, -43, -58, -75, -94, -114, -134, -152, -169, -181, -189, -188, -179, -160, -128, -83, -24, 50, 138, 241, 357, 484, 621, 766, 914, 1064, 1210, 1351, 1482, 1599, 1700, 1782, 1842, 1878, 1891, 1878, 1842, 1782, 1700, 1599, 1482, 1351, 1210, 1064, 914, 766, 621, 484, 357, 241, 138, 50, -24, -83, -128, -160, -179, -188, -189, -181, -169, -152, -134, -114, -94, -75, -58, -43, -30, -20, -12, -6, -2, 0, 1},
++};
++
+ /* CIC4/16 as a 64-tap FIR over x[16(j-3)..16j+15], oldest sample first */
+ const int16_t dsp_cic_taps[64] __attribute__((aligned(16))) = {
+     0, 0, 0, 1, 4, 10, 20, 35,
+diff --git a/firmware/src/main.c b/firmware/src/main.c
+index 9b8b909..ce2fbea 100644
+--- a/firmware/src/main.c
++++ b/firmware/src/main.c
+@@ -242,7 +242,7 @@ static uint8_t execute(uint8_t op, uint32_t arg, uint32_t *value)
+         *value = stream_bench(arg & 0xFFFF, arg >> 16);
+         return CTL_OK;
+     case NB_DSPBENCH:
+-        if ((arg & 15) < 2 || (arg & 15) > 4)
++        if ((arg & 15) < 2 || (arg & 15) > 4) /* R2 has 4 bits here: 16 cannot be tested this way */
+             return CTL_BAD_ARGUMENT;
+         *value = stream_dsp_bench(arg);
+         return CTL_OK;
+diff --git a/firmware/src/stream.c b/firmware/src/stream.c
+index 1ce6417..a0406b1 100644
+--- a/firmware/src/stream.c
++++ b/firmware/src/stream.c
+@@ -65,7 +65,7 @@ unsigned stream_set(unsigned op, uint32_t value, uint32_t *effective)
+ {
+     switch (op) {
+     case NB_SET_DECIM:
+-        if (value < 2 || value > 4)
++        if ((value < 2 || value > 4) && value != 16)
+             return CTL_BAD_ARGUMENT;
+         stream_cfg.r2 = value;
+         *effective = stream_cfg.r2;
+diff --git a/firmware/tools/design_taps.py b/firmware/tools/design_taps.py
+index 574bc0a..0497a50 100644
+--- a/firmware/tools/design_taps.py
++++ b/firmware/tools/design_taps.py
+@@ -22,6 +22,10 @@ DESIGNS = {
+     2: (41, 200e3, 300e3, 12.0),
+     3: (61, 133e3, 200e3, 12.0),
+     4: (73, 100e3, 150e3, 12.0),
++    # 62.5 ksps for narrow modes (CW): half of what Windows' USB serial path takes (~0.28 MB/s). Stopband from 62.5 - 15 kHz.
++    # At most HIST - 1 = 127 taps (the stage-1 history ring in dsp.c); 81 because internal RAM is tight (one more 81-tap
++    # table, for R2 = 8, overflowed `data` by 1575 bytes; 121 taps for R2 = 8 alone by 615).
++    16: (81, 15e3, 47.5e3, 12.0),
+ }
+ 
+ 

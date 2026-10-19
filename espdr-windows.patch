@@ -1,0 +1,104 @@
+--- .venv/Lib/site-packages/espdr/nb.py.orig	2026-10-17 02:42:29.997343000 -0400
++++ .venv/Lib/site-packages/espdr/nb.py	2026-10-17 18:57:25.761338200 -0400
+@@ -306,7 +306,15 @@
+     # into the ROM loader, so clearing the lines one after the other (DTR first) kills the
+     # firmware. The kernel and pyserial both open with both asserted, which is harmless; closing
+     # drops both at once.
+-    return Link(serial.Serial(port, 115200, timeout=0.05))
++    # Windows (usbser.sys) drops them one at a time on close, which resets the chip: open with
++    # both deasserted so neither line ever changes.
++    ser = serial.Serial()
++    ser.port, ser.baudrate, ser.timeout = port, 115200, 0.05
++    ser.dtr = ser.rts = False
++    ser.open()
++    if hasattr(ser, "set_buffer_size"):     # Windows: the driver's default 4 KB queue is ~8 ms of the RX stream
++        ser.set_buffer_size(rx_size=1 << 20, tx_size=1 << 16)
++    return Link(ser)
+ 
+ 
+ def check_firmware(link):
+@@ -396,7 +404,7 @@
+     check_firmware(link)
+     print(f"budget per unit and lane: {SERVICE_BUDGET_CYCLES} cycles")
+     bad = 0
+-    for r2 in (4, 3, 2):
++    for r2 in (args.r2,) if getattr(args, "r2", None) else (4, 3, 2):
+         for fmt, name in ((1, "cs8"), (0, "cs16")):
+             for core1 in (0, 1):
+                 what = r2 | fmt << 4 | core1 << 8
+@@ -506,7 +514,7 @@
+     sub = ap.add_subparsers(dest="cmd", required=True)
+     r = sub.add_parser("run", help="tune, run and stream")
+     r.add_argument("--freq", type=float, required=True, help="LO frequency in Hz (e.g. 2400.1e6)")
+-    r.add_argument("--decim", type=int, choices=(2, 3, 4), default=4,
++    r.add_argument("--decim", type=int, choices=(2, 3, 4, 16), default=4,
+                    help="4: 250 ksps (+-100 kHz usable, default); 3: 333 ksps (+-133 kHz); 2: 500 ksps, which needs 1.0 MB/s - "
+                         "more than this USB link delivers, so samples are lost")
+     r.add_argument("--format", choices=sorted(FORMATS), default="cs8")
+@@ -528,6 +536,7 @@
+                         "per byte (the old way), 2 one check then 64 writes")
+     d = sub.add_parser("dspbench", help="time the on-chip decimator without a capture")
+     d.add_argument("--profile", action="store_true", help="per-section cycles (firmware built with PROFILE=1)")
++    d.add_argument("--r2", type=int, choices=(2, 3, 4), help="check only this decimation (default 4, 3, 2; 16 does not fit the 4-bit field)")
+     sub.add_parser("selftest", help="check the parser against a simulated ESP")
+     args = ap.parse_args()
+     try:
+--- .venv/Lib/site-packages/espdr/board.py.orig	2026-10-17 02:42:30.020344600 -0400
++++ .venv/Lib/site-packages/espdr/board.py	2026-10-17 02:42:50.356049600 -0400
+@@ -132,11 +132,11 @@
+     return None
+ 
+ 
+-def load_ram(kind, bridge=None, native=False, image=None, log=print):
++def load_ram(kind, bridge=None, native=False, image=None, log=print, port=None):
+     """Loads the image into the chip's RAM and waits for the native port; returns its device name."""
+     path = image_path(kind, image)
+     if native:
+-        found = native_ports()
++        found = [port] if port else native_ports()
+         if len(found) != 1:
+             raise BoardError("expected exactly one ESP32-S3 on its native USB port (303a:1001); hold BOOT, tap RESET, and try again")
+         port, before = found[0], "usb-reset"
+@@ -150,6 +150,8 @@
+     log(f"loading the {'transmitter' if kind == TX else 'receiver'} firmware into RAM through {port} (about 8 s) ...")
+     _esptool(["--port", port, "--before", before, "--after", "no-reset", "--no-stub", "load-ram", str(path)], "loading the image")
+     native_port = _wait_native()
++    if native and port and native_port:
++        native_port = port      # with several boards attached, stay on the one that was loaded
+     if not native_port:
+         raise BoardError("the image was loaded, but no native USB port (303a:1001) appeared. Connect the board's native USB port "
+                          "too, not only the UART port.")
+@@ -217,7 +219,7 @@
+         raise BoardError(f"{what}; run without --no-load to load the right firmware")
+     if state and state != kind:
+         log(f"the {'transmitter' if state == TX else 'receiver'} firmware is running; replacing it")
+-    new = load_ram(kind, bridge=bridge, native=native, image=image, log=log)
++    new = load_ram(kind, bridge=bridge, native=native, image=image, log=log, port=port if native else None)
+     flags = probe(new, timeout=3.0)
+     if kind_of(flags) != kind:
+         raise BoardError(f"the {kind} firmware was loaded, but {new} does not answer as one. Unplug and replug the board and try again.")
+--- .venv/Lib/site-packages/espdr/rtltcp.py.orig2	2026-10-17 18:53:54.428167000 -0400
++++ .venv/Lib/site-packages/espdr/rtltcp.py	2026-10-17 18:57:25.699855200 -0400
+@@ -20,7 +20,7 @@
+ from . import nb
+ 
+ HEADER = b"RTL0" + struct.pack(">II", 5, 29)  # "R820T" tuner with 29 gain steps: what clients expect to see
+-SRC_RATES = {3: 1e6 / 3, 4: 250_000.0}        # ESP output per --decim
++SRC_RATES = {3: 1e6 / 3, 4: 250_000.0, 16: 62_500.0}        # ESP output per --decim
+ LO_MIN, LO_MAX = 1_841_666_667, 2_790_000_000  # ESP tuning range, Hz (ESP_LO_MIN_HZ / ESP_LO_MAX_HZ in protocol/control.h)
+ # R820T gain table in tenths of a dB, for rtl_tcp's "set gain by index"
+ GAINS_TENTHS = (0, 9, 14, 27, 37, 77, 87, 125, 144, 157, 166, 197, 207, 229, 254, 280, 297, 328, 338, 364, 372,
+--- .venv/Lib/site-packages/espdr/cli_rx.py.orig2	2026-10-17 18:53:54.465835800 -0400
++++ .venv/Lib/site-packages/espdr/cli_rx.py	2026-10-17 18:57:25.730184200 -0400
+@@ -24,8 +24,9 @@
+     p.add_argument("-V", "--version", action="version", version=f"espdr-rx {__version__}")
+     srv = p.add_argument_group("rtl_tcp server")
+     srv.add_argument("--listen", default="127.0.0.1:1234", metavar="HOST:PORT", help="address of the rtl_tcp server (default 127.0.0.1:1234)")
+-    srv.add_argument("--decim", type=int, choices=(3, 4), default=4,
+-                     help="4: 250 ksps from the radio, +-100 kHz usable (default); 3: 333 ksps, +-133 kHz usable")
++    srv.add_argument("--decim", type=int, choices=(3, 4, 16), default=4,
++                     help="4: 250 ksps from the radio, +-100 kHz usable (default); 3: 333 ksps, +-133 kHz usable; "
++                          "16: 62.5 ksps, +-15 kHz usable (needs firmware with decimation 16; fits Windows' USB serial throughput)")
+     srv.add_argument("--ppm", type=float, default=0.0, metavar="PPM",
+                      help="this board's crystal error, positive if it runs fast (a client's ppm setting adds to it)")
+     srv.add_argument("--gain", type=int, default=60, metavar="N", help="gain selector 0..127 until the client sets one (default 60)")

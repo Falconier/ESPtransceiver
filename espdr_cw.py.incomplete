@@ -1,0 +1,155 @@
+"""espdr-cw: a CW transceiver for two ESP32-S3 boards (esp32-sdr-trx) with its own decoder and a browser interface.
+
+RX  board A runs espdr-rx at 62.5 ksps (the decimation-16 firmware: no sample loss on Windows). The receive chain of espdr_fldigi
+    (USB demodulator, AFC that keeps the carrier at 700 Hz) feeds cw_decoder, and the text appears in the page.
+TX  text typed in the page is keyed on board B: an optional steady lead tone, then the Morse, with the carrier moved away during the
+    spaces (--space-shift) because the chip's key-up is only 18 dB down. Board A keeps receiving, so you see your own signal decoded.
+
+Transmitting needs an amateur radio licence; this uses espdr-tx's licence confirmation (run espdr-tx --accept-licence once).
+The firmware only transmits inside 2320 .. 2450 MHz.
+
+  python espdr_cw.py --call W4DQB/EXP                 # then open http://127.0.0.1:8737
+"""
+import argparse
+import json
+import subprocess
+import sys
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import numpy as np
+
+import espdr_fldigi as br
+from cw_decoder import CwDecoder
+
+
+class Station:
+    def __init__(self, args):
+        self.args = args
+        self.lock = threading.Lock()
+        self.rx_text = ""
+        self.events = []                       # (seq, dict) for the page's event stream
+        self.seq = 0
+        self.tx_busy = False
+        self.tx_status = "idle"
+        self.wpm = args.wpm
+        self.lead = args.lead
+        self.space_on = args.space_shift != 0
+        self.decoder = CwDecoder(rate=br.AUDIO_RATE, tone=args.tone, wpm=args.wpm, emit=self._rx_char)
+        self.rx = None
+        self.tx = None
+        self.server = None
+
+    # -- events for the page
+    def _push(self, kind, **data):
+        with self.lock:
+            self.seq += 1
+            self.events = (self.events + [(self.seq, dict(kind=kind, **data))])[-500:]
+
+    def _rx_char(self, ch):
+        with self.lock:
+            self.rx_text = (self.rx_text + ch)[-20000:]
+        self._push("rx", text=ch)
+
+    def status(self):
+        afc = self.rx.afc if self.rx else None
+        return dict(dial=self.args.dial, tx=self.tx_status, wpm_rx=round(self.decoder.wpm, 1), wpm_tx=self.wpm,
+                    snr=round(self.decoder.snr_db, 1), key=bool(self.decoder.key),
+                    afc_hz=round(afc.shift + self.args.tone) if afc and afc.locked else None,
+                    lead=self.lead, space=self.space_on, call=self.args.call or "")
+
+    # -- receive
+    def start_rx(self):
+        a = self.args
+        cmd = [sys.executable, "-c", "from espdr.cli_rx import main; main()", "--native", "--port", a.rx_port, "--gain", str(a.rx_gain),
+               "--ppm", str(a.rx_ppm), "--listen", a.rtl, "--decim", str(a.decim)]
+        if a.rx_image:
+            cmd += ["--image", a.rx_image]
+        self.server = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in self.server.stdout:
+            if "rtl_tcp server" in line:
+                br.log("RX: " + line.strip())
+                break
+            if "espdr-rx:" in line or "Error" in line:
+                raise SystemExit("RX: " + line.strip())
+        threading.Thread(target=lambda: [None for _ in self.server.stdout], daemon=True).start()
+        host, _, port = a.rtl.rpartition(":")
+        self.rx = br.RtlClient((host, int(port)), a.dial * 1e6 + a.rx_shift, self.decoder.process, threading.Event())
+        self.rx.afc = br.RxAfc(a.tone)
+        self.rx.start()
+
+    # -- transmit
+    def start_tx(self):
+        a = self.args
+        self.tx = br.Transmitter(a.tx_port, a.dial * 1e6, a.tx_ppm, a.power, a.tone, a.space_shift)
+        self.space_hz = self.tx.space_hz
+
+    def send(self, text, tune_s=0.0):
+        if not self.tx:
+            return "no transmitter (start with --tx-port)"
+        with self.lock:
+            if self.tx_busy:
+                return "busy: a transmission is running"
+            self.tx_busy = True
+        threading.Thread(target=self._send, args=(text, tune_s), daemon=True).start()
+        return "ok"
+
+    def _send(self, text, tune_s):
+        rate, tone = br.TX_RATE, self.args.tone
+        parts = []
+        lead = tune_s or (self.lead if text else 0)
+        if lead:
+            t = np.arange(int(lead * rate)) / rate
+            parts.append(0.5 * np.minimum(1, np.minimum(t, t[::-1]) / 0.005) * np.sin(2 * np.pi * tone * t))
+            if text:
+                parts.append(np.zeros(rate // 2))
+        if text:
+            parts.append(br.morse_audio(text, wpm=self.wpm, tone=tone))
+        audio = np.concatenate(parts)
+        self.tx.space_hz = self.space_hz if self.space_on else 0.0
+        what = f"{len(text)} characters at {self.wpm:g} WPM" if text else f"{lead:g} s tune"
+        self.tx_status = "TX " + what
+        self._push("tx", text=text, what=what)
+        br.log(f"TX: {what}: {text!r}")
+        try:
+            self.tx.transmit((audio[i:i + 160] for i in range(0, len(audio), 160)), threading.Event())
+        except Exception as e:                                   # noqa: BLE001 - shown in the page
+            self._push("error", text=f"transmit failed: {e}")
+        finally:
+            self.tx_status = "idle"
+            self.tx_busy = False
+            self._push("txdone")
+
+
+PAGE = r"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ESP CW Station</title>
+<style>
+:root { --bg:#f6f7f9; --panel:#fff; --text:#1d2330; --muted:#667085; --line:#d9dee7; --accent:#2563eb; --tx:#c2410c; --ok:#15803d; }
+@media (prefers-color-scheme: dark) { :root { --bg:#0f1218; --panel:#171b23; --text:#e6e9ef; --muted:#98a2b3; --line:#2a303c;
+  --accent:#60a5fa; --tx:#fb923c; --ok:#4ade80; } }
+* { box-sizing:border-box } body { margin:0; background:var(--bg); color:var(--text); font:15px/1.4 system-ui,sans-serif }
+main { max-width:960px; margin:0 auto; padding:16px; display:grid; gap:12px }
+header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:baseline }
+h1 { font-size:18px; margin:0 } .stat { color:var(--muted); font-variant-numeric:tabular-nums }
+.stat b { color:var(--text); font-weight:600 } .pill { padding:2px 8px; border-radius:999px; border:1px solid var(--line) }
+.pill.on { color:var(--tx); border-color:var(--tx) } .pill.key { color:var(--ok); border-color:var(--ok) }
+section { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px }
+#rx { font:16px/1.5 ui-monospace,Consolas,monospace; height:46vh; overflow:auto; white-space:pre-wrap; word-break:break-word }
+#rx .tx { color:var(--tx) } #rx .err { color:#dc2626 }
+form { display:flex; gap:8px } input[type=text] { flex:1; min-width:0; font:16px ui-monospace,Consolas,monospace; padding:8px;
+  border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--text); text-transform:uppercase }
+button { padding:8px 14px; border-radius:6px; border:1px solid var(--line); background:var(--bg); color:var(--text); cursor:pointer }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff } button:disabled { opacity:.5; cursor:default }
+.row { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; margin-top:10px; color:var(--muted) }
+.row input[type=number] { width:64px; padding:4px; background:var(--bg); color:var(--text); border:1px solid var(--line); border-radius:4px }
+</style></head><body><main>
+<header><h1>ESP CW Station</h1>
+ <span class="stat">dial <b id="dial"></b> MHz</span><span class="stat">RX <b id="wpmrx">-</b> WPM</span>
+ <span class="stat">signal <b id="snr">-</b> dB</span><span class="stat">tone <b id="afc">-</b> Hz</span>
+ <span id="key" class="pill">key</span><span id="txs" class="pill">idle</span></header>
+<section><div id="rx" aria-live="polite"></div></section>
+<section>
+ <form id="f"><input id="msg" type="text" placeholder="Text to send" autocomplete="off">
+  <button class="primary" id="send
