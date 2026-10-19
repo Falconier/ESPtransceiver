@@ -26,7 +26,7 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 
 ## What works
 
-- Sending text as CW from board B and decoding it live from board A (confirmed on the air, e.g. `VVV DE <call>`).
+- **Both boards send and receive** (half duplex, one window per board): A→B and B→A both decoded `VVV DE <call>` on the air.
 - A Tk window with a frequency selector, RX/TX indicator, receive/decode and transmit/encode sections, and a speaker monitor
   with volume.
 - Receiving without sample loss on Windows, using a custom receiver firmware (see below).
@@ -107,9 +107,23 @@ even a perfect synthetic signal.
 
 ## Use
 
+**Each board as its own transceiver** (recommended): run the station once per board and pick the board in the window that opens.
+Both boards send and receive (half duplex), so they work each other like two stations.
+
+```powershell
+.\.venv\Scripts\python.exe espdr_trx_tk.py --call <your call sign>
+```
+
+It loads `release/esp32-sdr-trx-trx-decim16.bin`: the esp32-sdr-trx transmitter image, which also contains the receiver, built with
+the decimation-16 change. The board selector lists the ESP boards on USB by port and MAC; only ESP32-S3 boards run this firmware.
+
+**One receiver board and one transmitter board** in a single window (the first version):
+
 ```powershell
 .\.venv\Scripts\python.exe espdr_cw_tk.py --call <your call sign>
 ```
+
+In both, the window works like this:
 
 - **Frequency:** type MHz (2320.005–2449.995) and press Apply; both boards retune.
 - **Receive / decode:** decoded text, speed (WPM), signal (dB) and the AFC tone; **Monitor** and **Vol** play the receive audio
@@ -123,7 +137,9 @@ even a perfect synthetic signal.
 
 | File | What it is |
 |---|---|
-| `espdr_cw_tk.py` | The CW station window |
+| `espdr_trx_tk.py` | Station for one board that sends and receives, with the board selector |
+| `trx_board.py` | One board as a half-duplex transceiver over one USB link |
+| `espdr_cw_tk.py` | The CW station window (also the two-board version: one board receives, one transmits) |
 | `cw_decoder.py` | Streaming Morse decoder |
 | `espdr_fldigi.py` | Receive chain (rtl_tcp client, AFC, demodulator), CW keyer and transmitter control; also an fldigi bridge |
 | `decim16-firmware.patch` | Receiver firmware change: decimation 16 (62.5 ksps) |

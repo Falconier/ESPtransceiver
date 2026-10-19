@@ -233,6 +233,22 @@ Found on the way: **`--update-rate 8000` streams with 0 underruns on Windows** (
   (`--monitor-device` to pick another). Confirmed by the user
 - (the first web-interface attempt was cut off: `espdr_cw.py.incomplete`, not used)
 
+### Each board sends and receives: `espdr_trx_tk.py` + `trx_board.py`
+
+- [x] The esp32-sdr-trx **TX image also holds the receiver** (build flags 3 = narrowband RX + TX) and sets the receiver up again after
+  each transmission (`TX_END_FAILED` if it cannot). Built with decimation 16: `release/esp32-sdr-trx-trx-decim16.bin` (77,424 bytes, fits)
+- [x] One board, one link (`scripts/trx_cycle.py`): RX 4 s (62.0 ksps, 0 lost) -> TX "DE W4DQB/EXP" (finished, 0 underruns) -> RX 4 s
+  (62.4 ksps, 0 lost)
+- [x] `trx_board.Transceiver`: one board, half duplex, no espdr-rx/rtl_tcp: a thread keeps `nb.Link.run` streaming and only queues
+  packets; a DSP thread conjugates, removes DC, applies the LO's fine offset, then AFC, demodulator, decoder, monitor. Transmit stops the
+  stream, runs a transmitter session on the same link, then resumes
+- [x] Headless, both boards at 2394.250 MHz: **B->A `[carrier]VVV DE W4DQB/EXP`, A->B `[carrier]VVV DE W4DQB/EXP`** (both perfect)
+- [x] `espdr_trx_tk.py`: **board selector** (lists ESP boards on native USB with port and MAC; Board A/B known by MAC; warns before an
+  unknown board: a third ESP board is on COM13, MAC 38:44:BE:A9:FD:A8), then the station window for that board. Run it twice, one per board
+  ```powershell
+  .\.venv\Scripts\python.exe espdr_trx_tk.py --call W4DQB/EXP        # pick Board A; run again and pick Board B
+  ```
+
 ```powershell
 .\.venv\Scripts\python.exe espdr_cw_tk.py --call W4DQB/EXP
 ```
