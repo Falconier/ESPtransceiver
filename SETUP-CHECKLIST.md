@@ -339,3 +339,48 @@ espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --
   -110 Hz/s while transmitting; the AFC's drift line took it out
 - [ ] Interop with fldigi not tested: VB-CABLE's endpoints went missing (one of two driver instances in Error state); repair, then play our
   Olivia into fldigi and fldigi's into ours
+
+### Beacons
+
+- [x] **CW beacon** (`Transceiver.start_beacon`, window "Beacon" row): each cycle is "DE <call>" in CW, then a steady carrier to the end of
+  the period (default 30 s at 20 WPM: the ID takes 8.1 s, carrier 21.9 s). Cycles go out back to back in one transmission (a new session
+  after the firmware's 600 s limit); Stop or closing the window ends it, and the firmware drops the carrier within 0.5 s if the PC stops
+  feeding it. A period shorter than the ID + 2 s is refused. Receiving pauses on that board while it beacons
+- [x] Offline: three cycles decode as `DE W4DQB/EXP [carrier]` x3 at 20.0 WPM
+- [x] Live, 2394.250 MHz, B beaconing 2 cycles, A in CW: `W4DQB/EXP [carrier]DE W4DQB/EXP [carrier]` (the first "DE" fell into A's
+  settling), 0 underruns, stopped cleanly
+- [ ] **WSPR: skipped for now (owner's decision).** Blocker: WSPR's 1.46 Hz tones over 110 s need drift of a few Hz at most; the boards
+  drift ~110 Hz/s while transmitting (kHz per transmission). If it comes back: send **W4DQB** (WSPR cannot encode "/EXP"), grid/power
+  placeholder **AA00, 0 dBm** for tests between our boards (the boards' microwatts are below WSPR's 0 dBm minimum). Options then: a
+  per-board drift model on the transmitter, or our own drift-removing WSPR receiver
+- [x] **Standalone beacon firmware** (`beacon/beacon.c`, built with `make BEACON=1` in the firmware tree after `beacon/firmware-hooks.patch`):
+  replaces main.c's command loop; calibrates, picks the LO like `txlink.choose_lo`, and plays 8000 updates/s itself through new
+  `radio_tx_key_on/update/off` (the same error feedback and clamps as `radio_tx_run`). Same cycle as the station beacon; 5 ms
+  raised-cosine edges through the gain curve; 12 kHz space shift. WS2812 LED on GPIO48: amber hold-off 5 s, red follows the key,
+  green paused (BOOT toggles), blinking blue on failure
+- [x] First link failed: `.data` overflowed the 8 KB region by 411 bytes; the Morse table was packed into 16-bit codes (now 8127 / 8192)
+- [x] `load-ram` of the normal image crashed the ROM loader (StoreProhibited): with less code, esptool put a PADDING segment at
+  0x00000000 before the IROM segment. RAM tests use an `elf2image --ram-only-header` build (now the only image, `release/esp32-beacon.bin`)
+- [x] Live from RAM, 2394.250 MHz, beacon on B (COM5), A (COM4) in CW: `E E W4DQB/EXP [carrier]DE W4DQB/EXP [carrier]DE W4DQB/EXP`
+  (the first ID partly before A had settled)
+- [x] Receiver AFC fix found on the way: after ~1 min of beacon, IDs decoded as E/T noise. Raw I/Q showed the carrier was clean
+  (~70 dB, ~1 Hz/s drift). The AFC's 4 s median had absorbed the steady carrier and it chased other lines. `RxAfc` now locks
+  onto the strongest plain-spectrum peak >= 40 dB over the floor (away from DC), follows it within +-400 Hz (>= 20 dB), holds
+  ~3 s through key-up, and searches +-16 kHz (COM17 sits 12.4 kHz from A's dial; 20 kHz took in other lines). Replayed
+  captures decode `[carrier]DE W4DQB/EXP`; live, COM17 from RAM for 100 s: 3 IDs in a row clean. Beacon ID now starts after a
+  word space (firmware and `beacon_cycle`)
+- [x] Third S3 (COM17, C4:9E:7E:08:79:C0, 16 MB quad flash, 8 MB PSRAM): beacon from RAM ~70 dB at A, decodes
+- [x] **Flash boot works** (ROM direct boot of a `--ram-only-header` image at flash address 0, no ESP-IDF bootloader). The way there:
+  - IDF layout: the small image got a PADDING segment at 0x0 (bootloader refuses it); upstream's own rx image did not answer
+    after a flash boot either, so that route was dropped
+  - Visibility without a UART: LED stage colours, plus register snapshots and progress markers in RTC fast memory (0x600FE800),
+    read back with `esptool --no-stub dump-mem` after a USB reset (RTC memory survives it)
+  - Boot loop (USB drop every ~2.6 s): progress stopped 0.27 s into the hold-off. **Timer-group and RTC watchdogs in flash-boot
+    mode**: `disable_watchdogs()` cleared only `WDT_EN`; it now also clears `TIMG_WDT_FLASHBOOT_MOD_EN` / `RTC_CNTL_WDT_FLASHBOOT_MOD_EN`
+  - CPU not at 240 MHz after power-up (LED blinks stretched): `platform_init()` now enables the BBPLL's analog bus, sets the XTAL
+    frequency and the 8 MHz clock as `rtc_clk_init()` does (measured 240.08 MHz after a flash boot)
+  - Stage-0 register diff RAM vs flash boot: `RTC_CNTL_OPTIONS0` bit 7 `BB_I2C_FORCE_PU` set after download mode, clear after a
+    flash boot; now forced on (the PHY/PLL/SDM writes go over that bus). The super watchdog was already auto-fed by the ROM
+  - Live: flashed with `beacon/flash_beacon.py COM17`, started by reset, A decoded `DE W4DQB/EXP [carrier]` 3x in 100 s
+  - User check: RESET button and power cycle both go amber blinks, purple, cyan, red keying; no USB drop-outs
+- [x] LED: amber/red seen by the user on COM17 (GPIO48 is right for these boards)

@@ -1,0 +1,178 @@
+diff --git a/firmware/Makefile b/firmware/Makefile
+index d620c4a..5e8229d 100644
+--- a/firmware/Makefile
++++ b/firmware/Makefile
+@@ -12,6 +12,14 @@ ESPTOOL ?= esptool.py
+ NARROWBAND ?= 1
+ # TX=1 adds the experimental transmitter (protocol/transmit.h). It is a separate image: the receiver image contains no transmit code.
+ TX ?= 0
++# BEACON=1 builds the standalone CW beacon: the transmitter driven by BEACON_SRC instead of main.c's command loop, with no host.
++# BEACON_DEFS passes its settings, e.g. BEACON_DEFS="-DBEACON_WPM=15 -DLED_GPIO=38".
++BEACON ?= 0
++BEACON_SRC ?= src/beacon.c
++ifeq ($(BEACON),1)
++TX := 1
++BUILD ?= build-beacon
++endif
+ ifeq ($(TX),1)
+ BUILD ?= build-tx
+ else ifeq ($(NARROWBAND),1)
+@@ -61,6 +69,9 @@ NB_FLAGS := -DESPDR_NARROWBAND=1
+ ifeq ($(TX),1)
+ NB_FLAGS += -DESPDR_TX=1
+ endif
++ifeq ($(BEACON),1)
++NB_FLAGS += -DESPDR_BEACON=1 $(BEACON_DEFS)
++endif
+ ifeq ($(PROFILE),1)
+ NB_FLAGS += -DPROFILE=1 # per-section cycle counters in dsp_unit(), read with `espdr_nb.py dspbench --profile`
+ endif
+@@ -87,6 +98,10 @@ ifeq ($(NARROWBAND),1)
+ APP_SOURCES += dsp.c stream.c app_desc.c
+ NB_OBJECTS := $(BUILD)/dsp_core1.o
+ endif
++ifeq ($(BEACON),1)
++APP_SOURCES := $(filter-out main.c,$(APP_SOURCES))
++NB_OBJECTS += $(BUILD)/beacon.o
++endif
+ SDK_SOURCES := \
+ 	$(IDF)/esp_hw_support/port/esp32s3/rtc_clk.c \
+ 	$(IDF)/esp_hw_support/port/esp32s3/rtc_init.c \
+@@ -127,6 +142,9 @@ all: $(BUILD)/iq-source.bin
+ $(BUILD)/%.o: src/%.c $(wildcard src/*.h) $(wildcard $(PROTOCOL)/*.h) sdkconfig.h | $(BUILD)
+ 	$(CC) $(APP_CFLAGS) -c $< -o $@
+ 
++$(BUILD)/beacon.o: $(BEACON_SRC) $(wildcard src/*.h) $(wildcard $(PROTOCOL)/*.h) sdkconfig.h | $(BUILD)
++	$(CC) $(APP_CFLAGS) -c $< -o $@
++
+ $(BUILD)/dsp_core1.o: src/dsp.c src/dsp.h src/dsp_taps.h | $(BUILD)
+ 	$(CC) $(APP_CFLAGS) -DDSP_TAPS_EXTERN -DDSP_FUNC=dsp_unit_core1 '-DDSP_ATTR=__attribute__((section(".core1_text")))' -c $< -o $@
+ 
+diff --git a/firmware/src/platform.c b/firmware/src/platform.c
+index 618c417..0037c18 100644
+--- a/firmware/src/platform.c
++++ b/firmware/src/platform.c
+@@ -2,6 +2,7 @@
+ 
+ #include "hal/clk_gate_ll.h"
+ #include "hal/cpu_utility_ll.h"
++#include "hal/regi2c_ctrl_ll.h"
+ #include "hal/systimer_ll.h"
+ #include "soc/rtc.h"
+ #include "soc/rtc_cntl_reg.h"
+@@ -23,12 +24,17 @@ static void disable_watchdogs(void)
+ {
+     for (unsigned group = 0; group < 2; group++) {
+         REG(TIMG_WDTWPROTECT_REG(group)) = WDT_WRITE_KEY;
+-        REG(TIMG_WDTCONFIG0_REG(group)) &= ~TIMG_WDT_EN;
++        REG(TIMG_WDTCONFIG0_REG(group)) &= ~(TIMG_WDT_EN | TIMG_WDT_FLASHBOOT_MOD_EN); /* flash boot arms it in this mode too */
+         REG(TIMG_WDTWPROTECT_REG(group)) = 0;
+     }
+     REG(RTC_CNTL_WDTWPROTECT_REG) = WDT_WRITE_KEY;
+-    REG(RTC_CNTL_WDTCONFIG0_REG) &= ~RTC_CNTL_WDT_EN;
++    REG(RTC_CNTL_WDTCONFIG0_REG) &= ~(RTC_CNTL_WDT_EN | RTC_CNTL_WDT_FLASHBOOT_MOD_EN);
+     REG(RTC_CNTL_WDTWPROTECT_REG) = 0;
++    /* The super watchdog resets the chip unless fed. The ROM already lets the hardware feed it; make sure, as ESP-IDF's
++     * bootloader does. */
++    REG(RTC_CNTL_SWD_WPROTECT_REG) = RTC_CNTL_SWD_WKEY_VALUE;
++    REG(RTC_CNTL_SWD_CONF_REG) |= RTC_CNTL_SWD_AUTO_FEED_EN;
++    REG(RTC_CNTL_SWD_WPROTECT_REG) = 0;
+ }
+ 
+ void platform_init(void)
+@@ -37,6 +43,11 @@ void platform_init(void)
+ 
+     rtc_config_t rtc = RTC_CONFIG_DEFAULT();
+     rtc_init(rtc);
++    /* As ESP-IDF's rtc_clk_init(): the analog bus to the BBPLL, the crystal frequency and the 8 MHz RC clock. A load into RAM
++     * finds them set up by the ROM; a boot from flash does not, and the CPU clock then never reaches 240 MHz. */
++    regi2c_ctrl_ll_i2c_bbpll_enable();
++    rtc_clk_xtal_freq_update(SOC_XTAL_FREQ_40M);
++    rtc_clk_8m_enable(true, false);
+     rtc_cpu_freq_config_t cpu;
+     if (!rtc_clk_cpu_freq_mhz_to_config(CPU_MHZ, &cpu))
+         for (;;) {
+@@ -49,6 +60,11 @@ void platform_init(void)
+ 
+     /* rtc_init() may re-arm the RTC watchdog. */
+     disable_watchdogs();
++
++    /* Keep the baseband's analog control bus powered: every PHY, PLL and transmitter register write goes over it. The ROM's
++     * download mode leaves it forced on (a load into RAM works); a boot from flash does not, and then the radio set-up hangs or
++     * the transmitter ignores its frequency and gain updates. */
++    REG(RTC_CNTL_OPTIONS0_REG) |= RTC_CNTL_BB_I2C_FORCE_PU;
+ }
+ 
+ void start_core1(void)
+diff --git a/firmware/src/radio.c b/firmware/src/radio.c
+index a94c953..d781bd9 100644
+--- a/firmware/src/radio.c
++++ b/firmware/src/radio.c
+@@ -738,4 +738,49 @@ uint32_t radio_tx_run(void)
+     (void)overruns;
+     return (uint32_t)reason << 24 | sat8(underruns) << 16 | (late > 0xFFFF ? 0xFFFF : late);
+ }
++#ifdef ESPDR_BEACON
++/* ---- direct keying (standalone beacon) ----------------------------------------------------------------------------
++ * The beacon image has no host: it calls radio_tx_begin() itself and then plays one update at a time, with the same
++ * second-order error feedback and clamps as radio_tx_run(). */
++static int32_t key_e1, key_e2;
++static bool key_on;
++
++void radio_tx_key_on(void)
++{
++    if (!tx.prepared || key_on)
++        return;
++    start_tx_tone_step(1, 0, TX_GAIN_WEAKEST, 0, 0, 0);
++    key_e1 = key_e2 = 0;
++    key_on = true;
++}
++
++void radio_tx_key_update(int32_t q4, unsigned g)
++{
++    if (!key_on)
++        return;
++    g = g < TX_GAIN_STRONGEST ? TX_GAIN_STRONGEST : g > TX_GAIN_WEAKEST ? TX_GAIN_WEAKEST : g;
++    int32_t u = q4 * 4096 - 2 * key_e1 + key_e2;
++    int32_t w = (u + 0x8000) >> 16;
++    key_e2 = key_e1;
++    key_e1 = w * 65536 - u;
++    w = w > TX_MAX_STEPS ? TX_MAX_STEPS : w < -TX_MAX_STEPS ? -TX_MAX_STEPS : w;
++    tx_set_gain(g);
++    analog_write(I2C_SDM, 5, (uint8_t)((int32_t)(tx.word & 0xFF) + w));
++}
++
++unsigned radio_tx_key_off(void)
++{
++    if (key_on) {
++        analog_write(I2C_SDM, 5, (uint8_t)(tx.word & 0xFF));
++        start_tx_tone_step(0, 0, 0, 0, 0, 0);
++        key_on = false;
++    }
++    if (tx.prepared) {
++        txcal_work_mode();
++        receiver.status = reconfigure(true);
++        tx.prepared = false;
++    }
++    return receiver.status;
++}
++#endif
+ #endif
+diff --git a/firmware/src/radio.h b/firmware/src/radio.h
+index 8324d6a..e52451e 100644
+--- a/firmware/src/radio.h
++++ b/firmware/src/radio.h
+@@ -35,6 +35,13 @@ unsigned radio_tx_set(unsigned op, uint32_t arg);
+ unsigned radio_tx_begin(uint32_t *word);
+ uint32_t radio_tx_temp(unsigned range); /* TX_OP_TEMP */
+ uint32_t radio_tx_run(void);
++#ifdef ESPDR_BEACON
++/* Standalone beacon (BEACON=1): after radio_tx_begin(), key the carrier on, play one update per tick (offset in 1/16
++ * PLL word steps, gain code), then key off. radio_tx_key_off() also sets the receiver up again and returns its ESP_RADIO_* status. */
++void radio_tx_key_on(void);
++void radio_tx_key_update(int32_t q4, unsigned gain);
++unsigned radio_tx_key_off(void);
++#endif
+ #endif
+ 
+ /* The dump engine's control word for the selected sample rate (not running),

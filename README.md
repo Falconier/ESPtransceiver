@@ -30,6 +30,12 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 - **Feld Hellschreiber** as a second mode: text sent as a dot-matrix picture and shown as a scrolling image that you read by eye
   (`CQ DE <call>` read clearly both ways on the air).
 - **Olivia 8/250 and 16/500** (multi-tone FSK with strong error correction): `CQ DE <call>` decoded both ways in both modes on the air.
+- **CW beacon:** a steady carrier with `DE <call>` in CW every 30 s at 20 WPM (both adjustable), decoded live by the other board.
+- **Standalone beacon firmware** (`beacon/`): the same CW beacon running on a board by itself, with no PC, and the RGB LED lit red
+  while it transmits. Written to flash it starts by itself at power-up; board A decoded `DE W4DQB/EXP [carrier]` from it three
+  times in a row (see beacon/README.md).
+- **AFC for long carriers:** the receiver now follows a steady carrier in the plain spectrum and searches +-16 kHz, so a beacon
+  that has warmed up (drifting only ~1 Hz/s) and boards whose crystals differ by ~12 kHz still decode.
 - A Tk window with a frequency selector, RX/TX indicator, receive/decode and transmit/encode sections, and a speaker monitor
   with volume.
 - Receiving without sample loss on Windows, using a custom receiver firmware (see below).
@@ -154,6 +160,10 @@ the decimation-16 change. The board selector lists the ESP boards on USB by port
 
 In both, the window works like this:
 
+- **Beacon** (per-board station): "ID every … s at … WPM" and Start/Stop. Each cycle sends `DE <call>` in CW and then a steady
+  carrier until the next ID. It runs until you press Stop or close the window; the board does not receive meanwhile. Beacon
+  operation has its own rules in your licence conditions (automatic control, frequencies, identification): check them first.
+  To run a beacon with no PC at all, see the standalone firmware in [beacon/README.md](beacon/README.md).
 - **Mode** (per-board station): CW, Feld Hell, Olivia 8/250 or Olivia 16/500. In Hell mode the receive area shows the scrolling
   Hell image instead of text, with **Auto phase** and a **Phase** slider to keep letters whole. In Olivia the status line shows
   lock, offset and decode quality; keep the lead tone on (the receiver's AFC needs it).
@@ -179,6 +189,7 @@ In both, the window works like this:
 | `espdr_fldigi.py` | Receive chain (rtl_tcp client, AFC, demodulator), CW keyer and transmitter control; also an fldigi bridge |
 | `decim16-firmware.patch` | Receiver firmware change: decimation 16 (62.5 ksps) |
 | `espdr-windows.patch` | Fixes and additions to the installed `espdr` package for Windows |
+| `beacon/` | Standalone CW beacon firmware (`beacon.c`), its firmware-tree patch, build and flash scripts: see [beacon/README.md](beacon/README.md) |
 | `release/` | esp32-sdr-trx v1.0.0-rc4 release files and the decimation-16 receiver image |
 | `scripts/` | Measurement tools: gain keying test, I/Q capture and analysis, USB throughput |
 | `SETUP-CHECKLIST.md` | Full setup log with every measurement |

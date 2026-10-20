@@ -58,6 +58,7 @@ class Transceiver:
         self.hell_cols = queue.Queue()           # received Hell image columns for the window
         self.hell_rx = hell.HellRx(rate=br.AUDIO_RATE, tone=args.tone, emit=self.hell_cols.put)
         self.olivia_rx = None                    # olivia_rx.OliviaRx in the Olivia modes
+        self.beacon_stop = None                  # threading.Event while a beacon runs
 
     # -- start
     def start(self):
@@ -276,7 +277,64 @@ class Transceiver:
             self.sending = False
             self.hold.clear()
 
+    # -- CW beacon
+    def beacon_cycle(self, text, wpm, period_s, rate=None):
+        """One beacon cycle as keyer audio: the ID in CW, then a steady carrier to the end of `period_s`."""
+        rate, tone = rate or br.TX_RATE, self.a.tone
+        ident = br.morse_audio(text, wpm=wpm, tone=tone)
+        ident = np.concatenate([np.zeros(6 * int(rate * 1.2 / wpm)), ident])   # a word space after the carrier (morse_audio adds one unit)
+        n = int(period_s * rate) - len(ident)
+        if n < 2 * rate:
+            raise ValueError(f"the ID takes {len(ident) / rate:.1f} s: the period must be at least 2 s longer")
+        ramp = np.minimum(1.0, np.minimum(np.arange(n), np.arange(n)[::-1]) / (0.005 * rate))   # 5 ms edges
+        carrier = 0.5 * ramp * np.sin(2 * np.pi * tone * np.arange(n) / rate)
+        return np.concatenate([ident, carrier])
+
+    def start_beacon(self, text, wpm, period_s, shift_spaces):
+        """Transmits beacon cycles back to back until stop_beacon(). Receiving pauses meanwhile (half duplex)."""
+        if not self.ready:
+            return "not ready"
+        if self.sending:
+            return "already transmitting"
+        try:
+            cycle = self.beacon_cycle(text, wpm, period_s)
+        except ValueError as e:
+            return str(e)
+        self.sending = True
+        self.beacon_stop = threading.Event()
+        threading.Thread(target=self._beacon, args=(cycle, text, wpm, period_s, shift_spaces, self.beacon_stop), daemon=True).start()
+        return None
+
+    def stop_beacon(self):
+        if self.beacon_stop is not None:
+            self.beacon_stop.set()
+
+    def _beacon(self, cycle, text, wpm, period_s, shift_spaces, stop):
+        def blocks():
+            i = 0
+            while not stop.is_set():
+                yield cycle[i:i + 160]
+                i = i + 160 if i + 160 < len(cycle) else 0
+        self.hold.set()
+        try:
+            if not self.idle.wait(5.0):
+                raise RuntimeError("the receiver did not stop")
+            self.tx_obj.space_hz = self.space_hz if shift_spaces else 0.0
+            self.tx_obj.env_taps = 40
+            self.log.put(f"beacon on {self.dial_mhz:.3f} MHz: {text!r} at {wpm:g} WPM every {period_s:g} s")
+            while not stop.is_set():                             # a session ends after 600 s: start the next one
+                self.tx_obj.transmit(blocks(), stop)
+        except Exception as e:                                   # noqa: BLE001 - shown in the window
+            self.log.put(f"beacon failed: {e}")
+        finally:
+            self.beacon_stop = None
+            self.afc.reset()
+            self.sending = False
+            self.hold.clear()
+            self.log.put("beacon off")
+
     def close(self):
+        self.stop_beacon()
         self.set_monitor(False)
         self.stopping.set()
         self.idle.wait(2.0)
