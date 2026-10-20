@@ -384,3 +384,14 @@ espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --
   - Live: flashed with `beacon/flash_beacon.py COM17`, started by reset, A decoded `DE W4DQB/EXP [carrier]` 3x in 100 s
   - User check: RESET button and power cycle both go amber blinks, purple, cyan, red keying; no USB drop-outs
 - [x] LED: amber/red seen by the user on COM17 (GPIO48 is right for these boards)
+
+### Re-test of all modes after the AFC change (2026-10-20, boards A COM4 / B COM5, 2394.250 MHz, `scripts/mode_check.py`)
+
+- [x] First run: Olivia 8/250 and 16/500 OK both ways; Feld Hell readable both ways (`captures/check_hell_*.png`); **CW failed both
+  ways**. Replaying B's I/Q: the old AFC decoded it, the new one locked on a one-frame transient at the key-on, sat there through the
+  2 s lead (3 s key-up hold), and later jumped to the 12 kHz space carrier (in a mostly key-up frame the mark looked weak)
+- [x] Fix: `RxAfc.track_level`, the tracked carrier's recent strength. A new signal takes over only when comparable to it (>= 1/4;
+  a CW space at -18 dB is not), and while the carrier is present only a peak 10 dB stronger. All four saved captures (CW message,
+  three beacons) decode offline
+- [x] Live after the fix: Olivia 8/250 and 16/500 OK both ways; Hell readable; CW 8 of 9 directions OK over four runs (one B->A
+  garbled in the first run, then six in a row clean)
