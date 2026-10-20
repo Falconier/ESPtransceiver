@@ -74,3 +74,16 @@ already accepted with `espdr-tx --accept-licence`, you don't need to do it again
 
 Tested: the Windows build on board A (COM4), started from another folder. It loaded the firmware and decoded the flashed beacon on
 COM17. The Linux build is checked only by the workflow's smoke test (`--help` and `-m esptool version`), not yet on a board.
+
+## Releases
+
+A version tag publishes a release. The workflow builds both executables and creates the GitHub release with them, the udev rules,
+the beacon firmware and `SHA256SUMS`. The notes are `.github/release-notes.md`, followed by GitHub's list of changes since the
+previous tag.
+
+```bash
+git tag -a v0.1.0 -m "ESPtransceiver v0.1.0"
+git push origin v0.1.0
+```
+
+To withdraw a release, delete it together with its tag: `gh release delete v0.1.0 --cleanup-tag`.

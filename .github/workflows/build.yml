@@ -54,3 +54,34 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: dist/
+
+  # A version tag (v0.1.0, ...) publishes a GitHub release with both executables, the Linux udev rules and the standalone beacon
+  # firmware. Release notes: .github/release-notes.md, then GitHub's list of changes since the previous tag.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Collect the files
+        run: |
+          mkdir upload
+          v=${GITHUB_REF_NAME}
+          cp artifacts/ESP-Station-windows-x86_64/ESP-Station.exe "upload/ESP-Station-$v-windows-x86_64.exe"
+          cp artifacts/ESP-Station-linux-x86_64/ESP-Station "upload/ESP-Station-$v-linux-x86_64"
+          cp artifacts/ESP-Station-linux-x86_64/70-espdr.rules upload/
+          cp release/esp32-beacon.bin "upload/esp32-beacon-$v.bin"
+          (cd upload && sha256sum * > SHA256SUMS)
+          ls -l upload
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" upload/* --title "ESPtransceiver $GITHUB_REF_NAME" --notes-file .github/release-notes.md --generate-notes
