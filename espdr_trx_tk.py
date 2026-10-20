@@ -4,12 +4,14 @@ Pick the board in the window that opens (or pass --port). Run the program twice,
 boards work each other like two stations. The window is espdr_cw_tk's (frequency, RX/TX indicator, receive/decode, transmit/encode,
 monitor); trx_board.Transceiver drives the board.
 
-Transmitting needs an amateur radio licence (espdr-tx's licence confirmation, `espdr-tx --accept-licence`, once). The firmware
-only transmits inside 2320 .. 2450 MHz.
+Transmitting needs an amateur radio licence: confirm espdr-tx's licence notice once, with `espdr-tx --accept-licence` or with
+this program's `--accept-licence` (it prints the notice). The firmware only transmits inside 2320 .. 2450 MHz.
 
   python espdr_trx_tk.py --call W4DQB/EXP
+  ESP-Station --call W4DQB/EXP            (the built executable, see packaging/README.md)
 """
 import argparse
+import sys
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
@@ -63,10 +65,24 @@ class Selector(ttk.Frame):
         self.on_pick(port, mac)
 
 
+def resource(rel):
+    """A file shipped with the program: next to this script, or inside the executable built with PyInstaller."""
+    from pathlib import Path
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
+    return str(base / rel)
+
+
 def main():
+    # Built as an executable, sys.executable is this program: espdr runs esptool as `sys.executable -m esptool ...`, so answer that.
+    if getattr(sys, "frozen", False) and sys.argv[1:3] == ["-m", "esptool"]:
+        import esptool
+        sys.argv = ["esptool"] + sys.argv[3:]
+        sys.exit(esptool._main())
+
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--port", help="the board's native USB port; omit to choose in the window")
-    p.add_argument("--image", default="release/esp32-sdr-trx-trx-decim16.bin", help="transceiver firmware (TX image, decimation 16)")
+    p.add_argument("--image", default=resource("release/esp32-sdr-trx-trx-decim16.bin"),
+                   help="transceiver firmware (TX image, decimation 16)")
     p.add_argument("--dial", type=float, default=2394.250, help="start frequency in MHz (default 2394.250)")
     p.add_argument("--rx-gain", type=int, default=0, help="receiver gain selector (default 0: the boards are close)")
     p.add_argument("--rx-ppm", type=float, default=0.0)
@@ -77,8 +93,20 @@ def main():
     p.add_argument("--wpm", type=float, default=12.0, help="sending speed and the decoder's starting speed (default 12)")
     p.add_argument("--lead", type=float, default=2.0, help="lead tone before each message in seconds (default 2)")
     p.add_argument("--call", help="your call sign, for Send ID")
-    p.add_argument("--monitor-device", help="sound device for the monitor (default: Windows' default output)")
+    p.add_argument("--monitor-device", help="sound device for the monitor (default: the system's default output)")
+    p.add_argument("--accept-licence", action="store_true",
+                   help="print espdr-tx's licence notice and record that you accept it (needed once before transmitting)")
     args = p.parse_args()
+
+    from espdr import cli_tx
+    if args.accept_licence:                              # a dialog: the Windows executable has no console to print to
+        r = tk.Tk()
+        r.withdraw()
+        if messagebox.askyesno("Transmitter licence notice", cli_tx.LICENCE_NOTICE + "\nDo you accept this notice?", parent=r):
+            cli_tx._accept_licence()
+            messagebox.showinfo("Licence notice accepted", f"Recorded in {cli_tx._config_dir()}.\nTransmitting is enabled.", parent=r)
+        r.destroy()
+        return
 
     root = tk.Tk()
     root.title("ESP CW Station")
