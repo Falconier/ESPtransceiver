@@ -245,6 +245,19 @@ class Window:
         ttk.Entry(opts, textvariable=self.call, width=12).pack(side="left", padx=4)
         ttk.Button(opts, text="Send ID", command=self.send_id).pack(side="left", padx=4)
         ttk.Button(opts, text="Tune 2 s", command=self.tune).pack(side="left")
+        self.beacon_btn = None
+        if hasattr(radio, "start_beacon"):              # the per-board station: CW beacon (carrier with the ID every period)
+            brow = ttk.Frame(txf)
+            brow.pack(fill="x", padx=4, pady=(0, 4))
+            ttk.Label(brow, text="Beacon: ID every").pack(side="left")
+            self.beacon_period = tk.StringVar(value="30")
+            ttk.Spinbox(brow, from_=10, to=600, increment=5, width=5, textvariable=self.beacon_period).pack(side="left", padx=4)
+            ttk.Label(brow, text="s, carrier between, at").pack(side="left")
+            self.beacon_wpm = tk.StringVar(value="20")
+            ttk.Spinbox(brow, from_=5, to=30, increment=1, width=4, textvariable=self.beacon_wpm).pack(side="left", padx=4)
+            ttk.Label(brow, text="WPM").pack(side="left")
+            self.beacon_btn = ttk.Button(brow, text="Start beacon", command=self.toggle_beacon)
+            self.beacon_btn.pack(side="left", padx=12)
 
         self.status = ttk.Label(root, text="starting ...", relief="sunken", anchor="w")
         self.status.pack(fill="x", side="bottom")
@@ -356,6 +369,26 @@ class Window:
             return
         self._start_tx(f"DE {call}", self.args.lead if self.lead.get() else 0)
 
+    def toggle_beacon(self):
+        if self.radio.beacon_stop is not None:
+            self.radio.stop_beacon()
+            self.say("stopping the beacon (the buffer plays out first)")
+            return
+        call = self.call.get().strip().upper()
+        if not call:
+            self.say("enter your call sign first: the beacon sends DE <call>")
+            return
+        try:
+            period, wpm = float(self.beacon_period.get()), float(self.beacon_wpm.get())
+        except ValueError:
+            self.say("period and WPM must be numbers")
+            return
+        err = self.radio.start_beacon(f"DE {call}", wpm, period, self.shift.get())
+        if err:
+            self.say(err)
+            return
+        self.append(f"\n[beacon: DE {call} at {wpm:g} WPM every {period:g} s, carrier between]\n", "tx")
+
     def tune(self):
         self._start_tx("", 2.0)
 
@@ -395,6 +428,10 @@ class Window:
         elif r.ready:
             self.mode.configure(text="RX", bg="#16a34a")
         self.sendbtn.configure(state="disabled" if r.sending or not r.tx else "normal")
+        if self.beacon_btn is not None:
+            on = r.beacon_stop is not None
+            self.beacon_btn.configure(text="Stop beacon" if on else "Start beacon",
+                                      state="normal" if on or (r.tx and not r.sending) else "disabled")
         d = r.decoder
         self.keylight.itemconfigure(self.keydot, fill="#f59e0b" if d.key else "gray70")
         afc = r.rx.afc if r.rx else None
