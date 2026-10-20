@@ -152,6 +152,9 @@ Both boards send and receive (half duplex), so they work each other like two sta
 It loads `release/esp32-sdr-trx-trx-decim16.bin`: the esp32-sdr-trx transmitter image, which also contains the receiver, built with
 the decimation-16 change. The board selector lists the ESP boards on USB by port and MAC; only ESP32-S3 boards run this firmware.
 
+**Without Python:** the same station is built as one executable for Windows (`ESP-Station.exe`) and Linux (`ESP-Station`). Download
+it from the GitHub Actions run, or build it with `packaging/build.py`; see [packaging/README.md](packaging/README.md).
+
 **One receiver board and one transmitter board** in a single window (the first version):
 
 ```powershell
@@ -180,6 +183,7 @@ In both, the window works like this:
 | File | What it is |
 |---|---|
 | `espdr_trx_tk.py` | Station for one board that sends and receives, with the board selector |
+| `packaging/`, `.github/workflows/build.yml` | One-file executables of the station for Windows and Linux (PyInstaller) |
 | `trx_board.py` | One board as a half-duplex transceiver over one USB link |
 | `espdr_cw_tk.py` | The CW station window (also the two-board version: one board receives, one transmits) |
 | `cw_decoder.py` | Streaming Morse decoder |
