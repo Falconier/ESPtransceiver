@@ -34,7 +34,8 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 - **Standalone beacon firmware** (`beacon/`): the same CW beacon running on a board by itself, with no PC, and the RGB LED lit red
   while it transmits. Written to flash it starts by itself at power-up; board A decoded `DE W4DQB/EXP [carrier]` from it three
   times in a row (see beacon/README.md).
-- **AFC for long carriers:** the receiver now follows a steady carrier in the plain spectrum and searches +-16 kHz, so a beacon
+- **AFC for long carriers:** the receiver now follows a steady carrier in the plain spectrum (only a comparable or stronger signal
+  takes it over, not a CW space) and searches +-16 kHz, so a beacon
   that has warmed up (drifting only ~1 Hz/s) and boards whose crystals differ by ~12 kHz still decode.
 - A Tk window with a frequency selector, RX/TX indicator, receive/decode and transmit/encode sections, and a speaker monitor
   with volume.

@@ -95,6 +95,7 @@ class RxAfc:
         self.phase = 0.0
         self.locked = False
         self.track_miss = 0     # spectra since the locked carrier was last seen near its frequency
+        self.track_level = 0.0  # recent strength of the tracked carrier (plain power)
         self.peak = 0.0         # strongest recent ratio: only signals within 12 dB of it steer (not CW spaces, see --space-shift)
         # Hold after lock (multi-tone modes such as Olivia): lock on the first carrier (the lead tone), then stop steering, which
         # would chase the changing tones; the mode's receiver follows the drift. After ~3 s without a signal, unlock again.
@@ -111,7 +112,7 @@ class RxAfc:
 
     def reset(self):
         self.hist, self.shift, self.locked, self.peak, self.quiet = [], 0.0, False, 0.0, 0
-        self.track_miss = 0
+        self.track_miss, self.track_level = 0, 0.0
         self.lead, self.line, self.collecting = [], None, False
 
     def _peak_hz(self, p, k):
@@ -162,37 +163,40 @@ class RxAfc:
                 self.lead, self.line, self.collecting = [(t_mid, self._peak_hz(p, k))], None, True
             return
         # A steady carrier (a beacon, once the board has warmed up and drifts ~1 Hz/s) becomes part of the 4 s median within seconds,
-        # and the ratio then takes it for a spur. So a strong carrier is also found in the plain spectrum (the strongest peak, 40 dB
-        # over the band's floor, away from the DC residual), and a locked one is followed there near where it is.
+        # and the ratio then takes it for a spur. So a locked carrier is followed in the plain spectrum near where it is, and a strong
+        # carrier (the strongest peak, 40 dB over the band's floor, away from the DC residual) is locked on even without the ratio.
+        # track_level is the tracked carrier's recent strength: only something comparable takes over (not a CW space, which the
+        # transmitter moves 12 kHz away at -18 dB, nor a weak line), and while the carrier is there only something 10 dB stronger.
         floor = np.median(p[self.band]) + 1e-30
         away = self.band & (np.abs(self.f) > 150)
         kp = int(np.flatnonzero(away)[np.argmax(p[away])])
         strong = p[kp] > 1e4 * floor
+        new_signal = ratio[k] >= 10 and ratio[k] >= self.peak / 16    # 10 dB over the usual spectrum, not a key-up/space
         if self.locked:
             near = self.band & (np.abs(self.f - (self.shift + self.target)) < 400)
-            if near.any():
-                kn = int(np.flatnonzero(near)[np.argmax(p[near])])
-                if p[kn] > 100 * floor:                    # 20 dB: the key is down
-                    if strong and p[kp] > 10 * p[kn] and abs(self.f[kp] - self.f[kn]) > 400:
-                        kn = kp                            # a carrier 10 dB stronger elsewhere: go there
-                        self.shift = self._peak_hz(p, kn) - self.target
-                    else:
-                        self.shift += 0.5 * (self._peak_hz(p, kn) - self.target - self.shift)
+            kn = int(np.flatnonzero(near)[np.argmax(p[near])]) if near.any() else None
+            if kn is not None and p[kn] > 100 * floor:     # 20 dB: the key is down
+                self.track_level = max(float(p[kn]), self.track_level * 0.98)
+                if strong and p[kp] > 10 * self.track_level and abs(self.f[kp] - self.f[kn]) > 400:
+                    self._lock(p, kp)                      # a carrier 10 dB stronger elsewhere: go there
+                else:
+                    self.shift += 0.5 * (self._peak_hz(p, kn) - self.target - self.shift)
                     self.track_miss = 0
-                    return
+                return
             self.track_miss += 1
+            if new_signal and p[k] > self.track_level / 4 and abs(self.f[k] - (self.shift + self.target)) > 400:
+                self._lock(p, k)                           # a new signal as strong as ours, elsewhere: go there
+                return
             if self.track_miss < 45:                       # key-up or a gap (< ~3 s): stay on this carrier
                 return
+            self.locked = False
         if strong:
-            self.shift, self.locked, self.track_miss = self._peak_hz(p, kp) - self.target, True, 0
-            return
-        if ratio[k] < 10 or ratio[k] < self.peak / 16:     # nothing 10 dB over the usual spectrum, or a key-up/space: hold
-            return
-        want = self.f[k] - self.target
-        if not self.locked or abs(want - self.shift) > 1500:
-            self.shift, self.locked = want, True           # first lock (or a jump): go there at once
-        else:
-            self.shift += 0.5 * (want - self.shift)
+            self._lock(p, kp)
+        elif new_signal:
+            self._lock(p, k)
+
+    def _lock(self, p, k):
+        self.shift, self.locked, self.track_miss, self.track_level = self._peak_hz(p, k) - self.target, True, 0, float(p[k])
 
     def process(self, z):
         self.buf = np.concatenate([self.buf, z])
