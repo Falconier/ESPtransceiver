@@ -31,9 +31,9 @@ in Morse, have the other board receive it, decode it on screen and play it throu
   (`CQ DE <call>` read clearly both ways on the air).
 - **Olivia 8/250 and 16/500** (multi-tone FSK with strong error correction): `CQ DE <call>` decoded both ways in both modes on the air.
 - **CW beacon:** a steady carrier with `DE <call>` in CW every 30 s at 20 WPM (both adjustable), decoded live by the other board.
-- **Standalone beacon firmware** (`beacon/`): the same CW beacon running on a board by itself, with no PC, and the RGB LED lit red
-  while it transmits. Written to flash it starts by itself at power-up; board A decoded `DE W4DQB/EXP [carrier]` from it three
-  times in a row (see beacon/README.md).
+- **Standalone beacon firmware** (`beacon/`): a board beacons by itself from flash at power-up, with no PC, in CW (red LED),
+  Olivia 16/500 (green) or both in turn (purple); the BOOT button switches modes. The CW and the Olivia ID each decoded three times in a row
+  on another board (see beacon/README.md).
 - **AFC for long carriers:** the receiver now follows a steady carrier in the plain spectrum (only a comparable or stronger signal
   takes it over, not a CW space) and searches +-16 kHz, so a beacon
   that has warmed up (drifting only ~1 Hz/s) and boards whose crystals differ by ~12 kHz still decode.

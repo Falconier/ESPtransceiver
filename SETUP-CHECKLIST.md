@@ -395,3 +395,18 @@ espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --
   three beacons) decode offline
 - [x] Live after the fix: Olivia 8/250 and 16/500 OK both ways; Hell readable; CW 8 of 9 directions OK over four runs (one B->A
   garbled in the first run, then six in a row clean)
+
+### Beacon modes: CW, Olivia 16/500, both in turn (2026-10-22, beacon on COM17, receiver board B on COM5)
+
+- [x] BOOT short press cycles CW (red) -> Olivia 16/500 (green) -> both in turn (purple); a 1.5 s hold pauses (LED blinks) and
+  another resumes. Radio calibration is now white (purple is a mode)
+- [x] Olivia in firmware: `beacon/gen_olivia.py` encodes `BEACON_TEXT` + " " with `olivia.py` at build time into
+  `beacon/olivia_symbols.h` (256 symbols, in IRAM as 32-bit words; `.data` stays 8127 / 8192). Playback: 2 s lead at 700 Hz, 256
+  records per symbol, remainder carried forward as `olivia.tx_records()`, carrier off until the period ends
+- [x] From RAM: Olivia-only `DE W4DQB/EXP` x3 clean. Both-in-turn: CW half decoded; the Olivia half did not, because its lead tone
+  continued the CW carrier and the receiver's Olivia lock wants a new tone. Fix: carrier off 4 s before an Olivia ID that follows
+  CW. Then Olivia x3 clean (one earlier first ID partly garbled)
+- [x] BOOT ignored after `flash_beacon.py` (USB reset) but fine after a power cycle. LED pin tests (`-DBEACON_BUTTON_TEST=1/2/3`):
+  the pin read fine from RAM in every radio state, but not from flash after a USB reset. Cause: GPIO0 is RTC pad 0, and the RTC pad
+  mux / pad hold survive that reset. `button_init()` now clears `RTC_IO_TOUCH_PAD0_MUX_SEL` and `RTC_CNTL_TOUCH_PAD0_HOLD`
+- [x] Flashed, started by USB reset: the user confirmed the mode cycle and pause/resume on the board
