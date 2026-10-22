@@ -30,6 +30,10 @@ import numpy as np
 
 from espdr import board, cli_tx, dsp, nb, txlink, txmodes
 
+# This project's firmware images transmit from 2300 MHz (protocol/transmit.h: TX_MIN_HZ), below upstream's 2320, for the US
+# 13 cm segment 2300-2310 MHz (the beacon sits at 2304.350). espdr's own check follows the firmware.
+txlink.TX_MIN_HZ = 2_300_000_000
+
 RTL_RATE = 250_000         # espdr-rx passes exactly this rate through unchanged; 62_500 with --decim 16 (set in main)
 DECIM_RATES = {4: 250_000, 16: 62_500}
 AUDIO_RATE = 48_000        # sound-card side (WASAPI shared mode)
@@ -83,7 +87,8 @@ class RxAfc:
     more than fldigi's AFC follows. Spurs of the receiver stay at fixed frequencies, so they are removed by comparing each spectrum
     with the median of the last ~4 s; a CW carrier drifts through the bins and stands out."""
 
-    def __init__(self, target_hz, span_hz=16000.0):     # +-16 kHz: boards differ by up to ~13 kHz (crystals), wider takes in other lines
+    def __init__(self, target_hz, span_hz=16000.0, space_hz=12000.0):   # +-16 kHz: boards differ by up to ~13 kHz (crystals)
+        self.space_hz = space_hz    # the transmitters' CW space shift: a line this far from our carrier is its own key-up
         self.N = 1 << int(round(np.log2(RTL_RATE * 0.065)))     # ~65 ms per spectrum at any rate (16384 at 250 ksps)
         self.target = target_hz
         self.f = np.fft.fftshift(np.fft.fftfreq(self.N, 1 / RTL_RATE))
@@ -184,7 +189,9 @@ class RxAfc:
                     self.track_miss = 0
                 return
             self.track_miss += 1
-            if new_signal and p[k] > self.track_level / 4 and abs(self.f[k] - (self.shift + self.target)) > 400:
+            away_hz = abs(self.f[k] - (self.shift + self.target))
+            own_space = self.space_hz and abs(away_hz - self.space_hz) < 400     # our carrier, shifted for a CW space
+            if new_signal and p[k] > self.track_level / 4 and away_hz > 400 and not own_space:
                 self._lock(p, k)                           # a new signal as strong as ours, elsewhere: go there
                 return
             if self.track_miss < 45:                       # key-up or a gap (< ~3 s): stay on this carrier
@@ -448,7 +455,7 @@ class Transmitter:
     def set_dial(self, dial_hz, space_hz=None):
         """Plans the LO and the record offsets for a new dial frequency (between transmissions). Raises ValueError."""
         if not txlink.TX_MIN_HZ + 5_000 <= dial_hz <= txlink.TX_MAX_HZ - 5_000:
-            raise ValueError("the dial must be inside 2320.005 .. 2449.995 MHz (the transmitter's band)")
+            raise ValueError("the dial must be inside 2300.005 .. 2449.995 MHz (the transmitter's band)")
         if space_hz is None:
             space_hz = abs(self.space_hz)
         want = dial_hz / (1 + self.ppm * 1e-6)                     # in the chip's nominal clock

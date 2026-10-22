@@ -2,7 +2,7 @@
 
 > [!WARNING]
 > **You must hold an amateur radio licence to transmit with this project.** The licence has to cover the frequency you use
-> (the 13 cm band, 2320–2450 MHz in this setup), the mode (CW), and your licence conditions on power and identification.
+> (the 13 cm band, 2300–2450 MHz in this setup), the mode (CW), and your licence conditions on power and identification.
 > Identify with your own call sign; the software does not do it for you. The transmitter is a Wi-Fi chip's test tone: its power
 > is not calibrated (microwatts at a dev board's antenna), its harmonics and spurious emissions have not been measured, and its
 > frequency drifts by kilohertz. Do not add an amplifier or a gain antenna without measuring what comes out. Receiving needs no
@@ -12,7 +12,7 @@
 One board transmits, the other receives, and a small Windows program decodes, sends and lets you listen.
 
 This is experimental, proof-of-concept work: one pair of boards on one Windows 11 PC, tested in the 13 cm amateur band
-(default 2394.250 MHz).
+(default 2304.350 MHz; earlier tests used 2394.250 MHz).
 
 ## Objective
 
@@ -34,6 +34,8 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 - **Standalone beacon firmware** (`beacon/`): a board beacons by itself from flash at power-up, with no PC, in CW (red LED),
   Olivia 16/500 (green) or both in turn (purple); the BOOT button switches modes. The CW and the Olivia ID each decoded three times in a row
   on another board (see beacon/README.md).
+- **2304.350 MHz:** the default frequency, in the US 13 cm segment 2300–2310 MHz. This project's firmware transmits from 2300 MHz
+  (upstream stops at 2320); all modes and the beacon decoded there.
 - **AFC for long carriers:** the receiver now follows a steady carrier in the plain spectrum (only a comparable or stronger signal
   takes it over, not a CW space) and searches +-16 kHz, so a beacon
   that has warmed up (drifting only ~1 Hz/s) and boards whose crystals differ by ~12 kHz still decode.
@@ -171,7 +173,7 @@ In both, the window works like this:
 - **Mode** (per-board station): CW, Feld Hell, Olivia 8/250 or Olivia 16/500. In Hell mode the receive area shows the scrolling
   Hell image instead of text, with **Auto phase** and a **Phase** slider to keep letters whole. In Olivia the status line shows
   lock, offset and decode quality; keep the lead tone on (the receiver's AFC needs it).
-- **Frequency:** type MHz (2320.005–2449.995) and press Apply; both boards retune.
+- **Frequency:** type MHz (2300.005–2449.995) and press Apply; both boards retune.
 - **Receive / decode:** decoded text, speed (WPM), signal (dB) and the AFC tone; **Monitor** and **Vol** play the receive audio
   (noise and CW) on the default speakers (`--monitor-device` picks another).
 - **Transmit / encode:** type text (the Morse preview updates as you type) and press Send; **Send ID** sends `DE <call>`;

@@ -41,7 +41,7 @@
 #define BEACON_TEXT "DE W4DQB/EXP"
 #endif
 #ifndef BEACON_DIAL_HZ
-#define BEACON_DIAL_HZ 2394250000u /* the receiver's dial (USB); 2320.005 .. 2449.995 MHz */
+#define BEACON_DIAL_HZ 2304350000u /* the receiver's dial (USB); 2300.005 .. 2449.995 MHz */
 #endif
 #ifndef BEACON_TONE_HZ
 #define BEACON_TONE_HZ 700 /* the carrier sits this far above the dial */

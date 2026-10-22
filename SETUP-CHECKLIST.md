@@ -410,3 +410,16 @@ espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --
   the pin read fine from RAM in every radio state, but not from flash after a USB reset. Cause: GPIO0 is RTC pad 0, and the RTC pad
   mux / pad hold survive that reset. `button_init()` now clears `RTC_IO_TOUCH_PAD0_MUX_SEL` and `RTC_CNTL_TOUCH_PAD0_HOLD`
 - [x] Flashed, started by USB reset: the user confirmed the mode cycle and pause/resume on the board
+
+### Move to 2304.350 MHz (2026-10-22, board B on COM5 and COM17)
+
+- [x] Upstream refuses to transmit below 2320 MHz (a guard; the PLL's normal mode covers 2210-2790 MHz). `protocol/transmit.h`
+  `TX_MIN_HZ` is now 2300 MHz, in the beacon and in a rebuilt station image (`release/esp32-sdr-trx-trx-decim16.bin`, which also
+  gets the flash-boot start-up fixes in `platform.c`). Python: `txlink.TX_MIN_HZ` overridden in `espdr_fldigi.py`, band checks
+  2300.005-2449.995, default dial 2304.350 (stations, scripts, beacon)
+- [x] At 2304.350 the LO lands 177 Hz below the dial (at 2394.250: 14.6 kHz), so the CW space shift goes 12 kHz *up*. With COM17's
+  crystal ~12 kHz off board B's, that key-up carrier sat inside B's band and the AFC jumped to it near the end of a message
+  (COM17->B lost the last characters 3 of 3; fine at 2394.250). `RxAfc(space_hz=...)` now never jumps to a line one space shift
+  from its carrier. Then CW 6 of 6 clean both ways
+- [x] Station modes at 2304.350: Olivia 8/250 and 16/500 OK both ways (one 16/500 run short, the next two clean), Hell clean both ways
+- [x] Beacon at 2304.350: CW from flash `DE W4DQB/EXP [carrier]` x3; Olivia from RAM x3 clean

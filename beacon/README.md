@@ -13,7 +13,7 @@ sends `DE W4DQB/EXP`, in one of three modes that the BOOT button switches betwee
 | **Olivia 16/500** | green | a 2 s lead tone, the ID in Olivia 16/500 (8.2 s), then the carrier off until the next period |
 | **Both in turn** | purple | CW one period, Olivia the next |
 
-A receiver set to **2394.250 MHz USB** hears the CW and the Olivia lead tone at 700 Hz; Olivia's 16 tones span 458–942 Hz. In
+A receiver set to **2304.350 MHz USB** hears the CW and the Olivia lead tone at 700 Hz; Olivia's 16 tones span 458–942 Hz. In
 the station, pick CW or Olivia 16/500 to match.
 
 Tested from flash on the third ESP32-S3 (COM17), decoded by board A or B:
@@ -100,7 +100,7 @@ beacon/build.sh BEACON_DEFS="-DBEACON_WPM=15 -DBEACON_PERIOD_S=60 -DBEACON_DIAL_
 | Setting | Default | What it does |
 |---|---|---|
 | `BEACON_TEXT` | `"DE W4DQB/EXP"` | the ID (letters, digits, `/ ? . , =`) |
-| `BEACON_DIAL_HZ` | `2394250000u` | receiver dial (USB), 2320.005–2449.995 MHz |
+| `BEACON_DIAL_HZ` | `2304350000u` | receiver dial (USB), 2300.005–2449.995 MHz |
 | `BEACON_TONE_HZ` | `700` | how far above the dial the carrier sits |
 | `BEACON_WPM` | `20` | speed (5–40) |
 | `BEACON_PERIOD_S` | `30` | one ID per period. The ID plus 2 s must fit, or the LED blinks blue |

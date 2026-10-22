@@ -5,7 +5,7 @@ boards work each other like two stations. The window is espdr_cw_tk's (frequency
 monitor); trx_board.Transceiver drives the board.
 
 Transmitting needs an amateur radio licence: confirm espdr-tx's licence notice once, with `espdr-tx --accept-licence` or with
-this program's `--accept-licence` (it prints the notice). The firmware only transmits inside 2320 .. 2450 MHz.
+this program's `--accept-licence` (it prints the notice). The firmware only transmits inside 2300 .. 2450 MHz.
 
   python espdr_trx_tk.py --call W4DQB/EXP
   ESP-Station --call W4DQB/EXP            (the built executable, see packaging/README.md)
@@ -83,7 +83,7 @@ def main():
     p.add_argument("--port", help="the board's native USB port; omit to choose in the window")
     p.add_argument("--image", default=resource("release/esp32-sdr-trx-trx-decim16.bin"),
                    help="transceiver firmware (TX image, decimation 16)")
-    p.add_argument("--dial", type=float, default=2394.250, help="start frequency in MHz (default 2394.250)")
+    p.add_argument("--dial", type=float, default=2304.350, help="start frequency in MHz (default 2304.350)")
     p.add_argument("--rx-gain", type=int, default=0, help="receiver gain selector (default 0: the boards are close)")
     p.add_argument("--rx-ppm", type=float, default=0.0)
     p.add_argument("--tx-ppm", type=float, default=0.0)

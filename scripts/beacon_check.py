@@ -27,7 +27,7 @@ else:
     board.load_ram(board.TX, native=True, image=image, log=print, port=beacon_port)   # not ensure(): the beacon answers no requests
 t0 = time.monotonic()
 
-args = argparse.Namespace(port=rx_port, image="release/esp32-sdr-trx-trx-decim16.bin", dial=2394.250, rx_gain=0, rx_ppm=0.0,
+args = argparse.Namespace(port=rx_port, image="release/esp32-sdr-trx-trx-decim16.bin", dial=2304.350, rx_gain=0, rx_ppm=0.0,
                           tx_ppm=0.0, power=0.0, tone=700.0, space_shift=12000.0, wpm=20.0, lead=2.0, call=None,
                           monitor_device=None)
 radio = trx_board.Transceiver(args)
