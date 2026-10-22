@@ -6,7 +6,7 @@ carrier moved away during spaces (the chip's key-up is only 18 dB down). Board A
 transmission shows up decoded: an end-to-end check.
 
 Transmitting needs an amateur radio licence (espdr-tx's licence confirmation, `espdr-tx --accept-licence`, once). The firmware
-only transmits inside 2320 .. 2450 MHz.
+only transmits inside 2300 .. 2450 MHz.
 
   python espdr_cw_tk.py --call W4DQB/EXP
 """
@@ -29,7 +29,7 @@ MODES = {"CW": "cw", "Feld Hell": "hell", "Olivia 8/250": "olivia-8/250", "Olivi
 OLIVIA_CHARS = {chr(c) for c in range(32, 127)}   # Olivia carries 7-bit ASCII, lower case included
 HELL_ROW_PX, HELL_COL_PX = 2, 6           # a glyph row is 4 receive slots, a glyph column 1 slot wide: keep letters near their shape
 
-BAND_MHZ = (2320.005, 2449.995)
+BAND_MHZ = (2300.005, 2449.995)
 ENCODE = {ch: code for code, ch in MORSE.items() if len(ch) == 1}
 
 

@@ -1,4 +1,4 @@
-> **Transmitting needs an amateur radio licence** that covers the frequency (the station transmits only inside 2320–2450 MHz),
+> **Transmitting needs an amateur radio licence** that covers the frequency (the station transmits only inside 2300–2450 MHz),
 > and you are responsible for what you send. A board flashed with the beacon transmits by itself whenever it has power.
 
 An ESP32-S3 used as a 13 cm (2.4 GHz) transceiver, built on [esp32-sdr-trx](https://github.com/jochenhammes/esp32-sdr-trx). It

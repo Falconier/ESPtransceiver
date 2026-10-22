@@ -17,10 +17,11 @@ port_a = sys.argv[1] if len(sys.argv) > 1 else "COM4"
 port_b = sys.argv[2] if len(sys.argv) > 2 else "COM5"
 modes = sys.argv[3:] or ["cw", "hell", "olivia-8/250", "olivia-16/500"]
 TEXT = "CQ DE W4DQB/EXP"
+DIAL = float(__import__("os").environ.get("DIAL_MHZ", "2394.250"))   # DIAL_MHZ=2304.350 to test another frequency
 
 
 def station(port):
-    a = argparse.Namespace(port=port, image="release/esp32-sdr-trx-trx-decim16.bin", dial=2394.250, rx_gain=0, rx_ppm=0.0,
+    a = argparse.Namespace(port=port, image="release/esp32-sdr-trx-trx-decim16.bin", dial=DIAL, rx_gain=0, rx_ppm=0.0,
                            tx_ppm=0.0, power=0.0, tone=700.0, space_shift=12000.0, wpm=12.0, lead=2.0, call="W4DQB/EXP",
                            monitor_device=None)
     return trx_board.Transceiver(a)

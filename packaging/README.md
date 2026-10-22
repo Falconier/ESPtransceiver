@@ -1,6 +1,6 @@
 # ESP-Station executables
 
-> **Transmitting needs an amateur licence** that covers the frequency. The station only transmits inside 2320–2450 MHz, and only
+> **Transmitting needs an amateur licence** that covers the frequency. The station only transmits inside 2300–2450 MHz, and only
 > after you have accepted the transmitter's licence notice (below).
 
 The per-board station (`espdr_trx_tk.py`) is built as one file that runs without Python:

@@ -25,7 +25,7 @@ from espdr import board, nb, txlink, txmodes
 
 DECIM = 16
 DC_TAU_S = 0.5
-BAND_MHZ = (2320.005, 2449.995)
+BAND_MHZ = (2300.005, 2449.995)
 
 
 def esp_ports():
@@ -68,7 +68,7 @@ class Transceiver:
             self.log.put(f"loading the transceiver firmware on {a.port} (about 8 s) ...")
             board.ensure(board.TX, port=a.port, native=True, load="always", image=a.image, log=lambda m: None)
             self.link = nb.open_link(a.port)
-            self.afc = br.RxAfc(a.tone)
+            self.afc = br.RxAfc(a.tone, space_hz=abs(a.space_shift))
             self.demod = br.UsbDemod()
             self.tx_obj = self._make_transmitter()
             self.rx = self.tx = self

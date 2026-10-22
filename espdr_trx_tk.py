@@ -5,7 +5,7 @@ boards work each other like two stations. The window is espdr_cw_tk's (frequency
 monitor); trx_board.Transceiver drives the board.
 
 Transmitting needs an amateur radio licence: confirm espdr-tx's licence notice once, with `espdr-tx --accept-licence` or with
-this program's `--accept-licence` (it prints the notice). The firmware only transmits inside 2320 .. 2450 MHz.
+this program's `--accept-licence` (it prints the notice). The firmware only transmits inside 2300 .. 2450 MHz.
 
   python espdr_trx_tk.py --call W4DQB/EXP
   ESP-Station --call W4DQB/EXP            (the built executable, see packaging/README.md)

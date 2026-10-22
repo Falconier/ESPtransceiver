@@ -11,7 +11,8 @@ export PATH="/s/esp/.espressif/tools/xtensa-esp-elf/esp-14.2.0_20251107/xtensa-e
 PY="$PWD/.venv/Scripts/python.exe"
 FW=repos/esp32-sdr-trx/firmware
 grep -q ESPDR_BEACON "$FW/src/radio.c" || git -C repos/esp32-sdr-trx apply "$PWD/beacon/firmware-hooks.patch"
-rm -f "$FW/build-beacon/beacon.o"   # BEACON_DEFS may have changed
+"$PY" beacon/gen_olivia.py         # the ID in Olivia, from BEACON_TEXT in beacon.c
+rm -f "$FW/build-beacon/beacon.o"   # BEACON_DEFS or the Olivia table may have changed
 make -C "$FW" BEACON=1 BEACON_SRC="$PWD/beacon/beacon.c" ESPTOOL="$PY -m esptool" "$@"
 "$PY" -m esptool --chip esp32s3 elf2image --ram-only-header --flash-mode dio --flash-freq 80m \
     "$FW/build-beacon/iq-source.elf" -o release/esp32-beacon.bin
