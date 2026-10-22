@@ -83,7 +83,7 @@ def main():
     p.add_argument("--port", help="the board's native USB port; omit to choose in the window")
     p.add_argument("--image", default=resource("release/esp32-sdr-trx-trx-decim16.bin"),
                    help="transceiver firmware (TX image, decimation 16)")
-    p.add_argument("--dial", type=float, default=2304.350, help="start frequency in MHz (default 2304.350)")
+    p.add_argument("--dial", type=float, default=2394.250, help="start frequency in MHz (default 2394.250)")
     p.add_argument("--rx-gain", type=int, default=0, help="receiver gain selector (default 0: the boards are close)")
     p.add_argument("--rx-ppm", type=float, default=0.0)
     p.add_argument("--tx-ppm", type=float, default=0.0)

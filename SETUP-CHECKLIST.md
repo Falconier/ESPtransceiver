@@ -423,3 +423,8 @@ espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --
   from its carrier. Then CW 6 of 6 clean both ways
 - [x] Station modes at 2304.350: Olivia 8/250 and 16/500 OK both ways (one 16/500 run short, the next two clean), Hell clean both ways
 - [x] Beacon at 2304.350: CW from flash `DE W4DQB/EXP [carrier]` x3; Olivia from RAM x3 clean
+- [x] Band plan (owner's decision): the stations' default dial is back at **2394.250** for experimental transmissions; only the
+  beacon uses **2304.350**. The 2300 MHz floor, the wider band checks and the AFC fix stay, so a station can tune to 2304.350 to hear
+  the beacon (`scripts/beacon_check.py` listens there; `scripts/mode_check.py` tests at 2394.250, `DIAL_MHZ=` for others)
+- [x] Station test back at 2394.250 (A COM4 / B COM5, rebuilt image): Olivia 8/250 and 16/500 OK both ways, Hell clean both ways,
+  CW B->A clean; A->B `CG DE ...` once (the known first-letter slip), then clean both ways on the repeat

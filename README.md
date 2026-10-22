@@ -12,7 +12,7 @@
 One board transmits, the other receives, and a small Windows program decodes, sends and lets you listen.
 
 This is experimental, proof-of-concept work: one pair of boards on one Windows 11 PC, tested in the 13 cm amateur band
-(default 2304.350 MHz; earlier tests used 2394.250 MHz).
+(the stations default to 2394.250 MHz; the beacon sends on 2304.350 MHz).
 
 ## Objective
 
@@ -34,8 +34,10 @@ in Morse, have the other board receive it, decode it on screen and play it throu
 - **Standalone beacon firmware** (`beacon/`): a board beacons by itself from flash at power-up, with no PC, in CW (red LED),
   Olivia 16/500 (green) or both in turn (purple); the BOOT button switches modes. The CW and the Olivia ID each decoded three times in a row
   on another board (see beacon/README.md).
-- **2304.350 MHz:** the default frequency, in the US 13 cm segment 2300–2310 MHz. This project's firmware transmits from 2300 MHz
-  (upstream stops at 2320); all modes and the beacon decoded there.
+- **Band plan:** experimental transmissions between the stations stay at **2394.250 MHz** (the stations' default); the
+  **beacon** sends on **2304.350 MHz**, in the US 13 cm segment 2300–2310 MHz. This project's firmware transmits from 2300 MHz
+  (upstream stops at 2320), so a station can also be tuned to 2304.350 to hear the beacon. All modes and the beacon decoded at
+  2304.350.
 - **AFC for long carriers:** the receiver now follows a steady carrier in the plain spectrum (only a comparable or stronger signal
   takes it over, not a CW space) and searches +-16 kHz, so a beacon
   that has warmed up (drifting only ~1 Hz/s) and boards whose crystals differ by ~12 kHz still decode.

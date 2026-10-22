@@ -31,7 +31,8 @@ import numpy as np
 from espdr import board, cli_tx, dsp, nb, txlink, txmodes
 
 # This project's firmware images transmit from 2300 MHz (protocol/transmit.h: TX_MIN_HZ), below upstream's 2320, for the US
-# 13 cm segment 2300-2310 MHz (the beacon sits at 2304.350). espdr's own check follows the firmware.
+# 13 cm segment 2300-2310 MHz: the beacon sits at 2304.350, and a station can tune there to hear it (experimental
+# transmissions stay at 2394.250). espdr's own check follows the firmware.
 txlink.TX_MIN_HZ = 2_300_000_000
 
 RTL_RATE = 250_000         # espdr-rx passes exactly this rate through unchanged; 62_500 with --decim 16 (set in main)

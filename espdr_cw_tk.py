@@ -451,7 +451,7 @@ class Window:
 
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--dial", type=float, default=2304.350, help="start frequency in MHz (default 2304.350)")
+    p.add_argument("--dial", type=float, default=2394.250, help="start frequency in MHz (default 2394.250)")
     p.add_argument("--rx-port", default="COM4", help="receiver board's native USB port (default COM4)")
     p.add_argument("--tx-port", default="COM5", help="transmitter board's native USB port (default COM5; '' for receive only)")
     p.add_argument("--decim", type=int, choices=sorted(br.DECIM_RATES), default=16, help="receiver decimation (default 16)")
