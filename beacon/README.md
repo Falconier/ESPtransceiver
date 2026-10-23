@@ -147,6 +147,30 @@ power cycle the board beacons again. To make it quiet at power-up, erase the fla
 .venv/Scripts/python.exe -m esptool --chip esp32s3 --port COM17 erase-flash
 ```
 
+## Receiving it from a distance
+
+Tested with the beacon about 30 m (100 ft) away, through two walls, in a tree: one of the station boards picked it up about 20 dB
+above the noise when averaged over a second (about 17 dB in the station's 65 ms frames). Settings that matter:
+
+- **No Wi-Fi next to the receiving board.** An ESP32 running a Wi-Fi access point (here the C5 with ESP-WebSDR) beside the board
+  overloads its receiver, which has no filtering in front of it: with the C5 next to the boards the beacon did not show at all;
+  with it unplugged it did.
+- **More receive gain:** `--rx-gain 40 --rx-shift 2` (the defaults, 0 and 4, suit boards on the same desk). With 8-bit samples the
+  default left the noise at about 1-2 counts, so a weak carrier was rounded away. Gain 60 and above overloads the receiver.
+- **Olivia, not CW, at the limit:** at that spot the station decoded the beacon's Olivia ID (one clean `DE W4DQB/EXP` in about
+  three, the rest partial), but not its CW. The CW decoder looks at about 200 Hz of audio, which leaves this signal around 6 dB
+  above the noise; Olivia decodes below the noise. Filtered to +-25 Hz offline, the CW ID did stand clear by about 10 dB, so a
+  narrowband CW decoder could get it; the station does not have one yet.
+- **The beacon's frequency:** the boards' crystals put it up to ~13 kHz off the dial (at 2304.350 board A saw it at 2304.342); the
+  station's AFC searches +-16 kHz around the dial.
+
+```bash
+.venv/Scripts/python.exe espdr_trx_tk.py --dial 2304.350 --rx-gain 40 --rx-shift 2 --call <your call sign>
+```
+
+Then pick Olivia 16/500 in the window (or CW when the beacon is close). To check from a script:
+`RX_GAIN=40 RX_SHIFT=2 .venv/Scripts/python.exe scripts/beacon_check.py - COM4 130 - olivia-16/500`.
+
 ## Limits
 
 - The image's data area is 8 KB and is nearly full (8127 bytes). A much longer ID table or new strings may not fit.

@@ -428,3 +428,26 @@ espdr-tx --native --port COM5 --accept-licence -f 2350 -m fm --test-tone 1000 --
   the beacon (`scripts/beacon_check.py` listens there; `scripts/mode_check.py` tests at 2394.250, `DIAL_MHZ=` for others)
 - [x] Station test back at 2394.250 (A COM4 / B COM5, rebuilt image): Olivia 8/250 and 16/500 OK both ways, Hell clean both ways,
   CW B->A clean; A->B `CG DE ...` once (the known first-letter slip), then clean both ways on the repeat
+
+### Decoding the beacon from ~30 m (2026-10-22, beacon in a tree through two walls; board A COM4 receiving, B COM5)
+
+- [x] Neither board decoded it, though the ESP-WebSDR (C5) beside them showed it at "2304.32". Gain/shift sweep on A at 2304.350:
+  the stream's 8-bit samples had only ~1-2 counts of noise RMS at gain 0 / shift 4 (a weak carrier rounds away); `--rx-shift` added
+  (trx_board, espdr_trx_tk; beacon_check via RX_GAIN/RX_SHIFT). Gain >= 60 overloads (RMS falls, peaks hit the limit); gain 80 gives
+  nonsense. No beacon line at any gain while the C5 (Wi-Fi AP) was beside the boards
+- [x] C5 unplugged: the beacon at 2304.3419 MHz (-8.05 kHz from the dial), ~20-26 dB in 1 s averages, ~17 dB per 65 ms frame,
+  fading 5-10 dB (tree)
+- [x] AFC fixes found on the way (all replays of earlier captures still decode, plus one CW capture the committed AFC got wrong):
+  - it locked on the receiver's own LO leakage, which sits at the fine-tuning offset (`dc_hz`, -177 Hz at 2304.350, +31 Hz at
+    2394.250), not at 0 Hz. The station now passes `dc_hz`; +-40 Hz around it is left out (boards A and B, with close crystals, put
+    each other's carrier only ~130 Hz from it: +-150 Hz cut them off); in the +-2 kHz spur comb around it nothing is locked directly
+    and a carrier is followed only at 20 dB
+  - a new signal must show at the same frequency in two consecutive frames (noise bins pass 10 dB every frame, never twice)
+  - a weak carrier (< 30 dB) is followed with gain 0.1 instead of 0.5, and kept down to 10 dB over the floor, but only within 15 dB
+    of its own recent level (else noise in a strong station's key-up pulled the AFC off between letters)
+- [x] Live with the C5 unplugged, gain 40 / shift 2: Olivia 16/500 decoded the distant beacon (`4DQB/EXP DE W4DQB/EXP`,
+  `/EXP DE W`, then `DE W4DQB/EXP` in 190 s); CW did not. Offline, the CW ID filtered to +-25 Hz stands ~10 dB clear, but the
+  decoder sees ~200 Hz (~6 dB); a narrow filter needs the tone within ~10 Hz, and on cold transmitters the tone wanders +-100 Hz
+  through a message. Two attempts (coherent 15-20 ms average, self-tuning tone) broke strong decodes and were reverted
+- [x] Station test at 2394.250 after the AFC changes: Olivia 8/250 and 16/500 OK both ways, Hell clean both ways, CW A->B clean,
+  B->A one character wrong (`WH` for `W4`)
