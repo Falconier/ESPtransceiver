@@ -3,11 +3,13 @@
   python scripts/beacon_check.py BEACON_PORT RX_PORT [SECONDS] [IMAGE] [MODE]
 
 BEACON_PORT "-": only listen, e.g. to a flashed beacon. IMAGE "-": the default. MODE: the receiver's mode, cw (default) or
-olivia-16/500.
+olivia-16/500. RX_GAIN / RX_SHIFT (environment): receiver gain (default 0) and output shift (default 4); a distant beacon
+needs RX_GAIN=40 RX_SHIFT=2.
 
 The beacon keeps running after this script ends; press RESET on its board (or load other firmware) to stop it.
 """
 import argparse
+import os
 import sys
 import time
 
@@ -27,7 +29,8 @@ else:
     board.load_ram(board.TX, native=True, image=image, log=print, port=beacon_port)   # not ensure(): the beacon answers no requests
 t0 = time.monotonic()
 
-args = argparse.Namespace(port=rx_port, image="release/esp32-sdr-trx-trx-decim16.bin", dial=2304.350, rx_gain=0, rx_ppm=0.0,
+args = argparse.Namespace(port=rx_port, image="release/esp32-sdr-trx-trx-decim16.bin", dial=2304.350, rx_gain=int(os.environ.get("RX_GAIN", 0)),
+                          rx_shift=int(os.environ.get("RX_SHIFT", 4)), rx_ppm=0.0,
                           tx_ppm=0.0, power=0.0, tone=700.0, space_shift=12000.0, wpm=20.0, lead=2.0, call=None,
                           monitor_device=None)
 radio = trx_board.Transceiver(args)
