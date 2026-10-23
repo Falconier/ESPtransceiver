@@ -119,6 +119,10 @@ class RxAfc:
         self.collecting = False
         self.t_frame = 0                        # sample index of the next spectrum frame's start
         self.t_mix = 0                          # sample index of the next sample mixed
+        # Samples are mixed two frames (~130 ms) late: a new carrier locks after two frames (the repeat rule), and a weak beacon's
+        # CW ID would otherwise lose its first dash (the D of DE) to the old shift.
+        self.delay = 2 * self.N
+        self.pending = np.zeros(0, np.complex64)  # samples taken in but not yet mixed
 
     def reset(self):
         self.hist, self.shift, self.locked, self.peak, self.quiet = [], 0.0, False, 0.0, 0
@@ -199,8 +203,11 @@ class RxAfc:
             near = away & (np.abs(self.f - (self.shift + self.target)) < 400)
             kn = int(np.flatnonzero(near)[np.argmax(p[near])]) if near.any() else None
             # The key is down: 10 dB over the floor (20 dB in the spur comb), and within 15 dB of this carrier's recent strength, so
-            # that during a strong station's key-up a noise bump in the window is not taken for it.
-            if kn is not None and p[kn] > max((100 if comb[kn] else self.track_ratio) * floor, self.track_level / 30):
+            # that during a strong station's key-up a noise bump in the window is not taken for it. The floor is also the window's own
+            # median: near the LO leakage the noise is 5-7 dB above the band's, and noise there would otherwise pass every frame and
+            # hold the lock (on nothing) through a weak beacon's whole ID.
+            near_floor = max(floor, float(np.median(p[near]))) if near.any() else floor
+            if kn is not None and p[kn] > max((100 if comb[kn] else self.track_ratio) * near_floor, self.track_level / 30):
                 self.track_level = max(float(p[kn]), self.track_level * 0.98)
                 if strong and p[kp] > 10 * self.track_level and abs(self.f[kp] - self.f[kn]) > 400:
                     self._lock(p, kp)                      # a carrier 10 dB stronger elsewhere: go there
@@ -231,7 +238,9 @@ class RxAfc:
         while len(self.buf) >= self.N:
             self._update(self.buf[:self.N])
             self.buf = self.buf[self.N:]
-        n = len(z)
+        self.pending = np.concatenate([self.pending, z])
+        n = max(0, len(self.pending) - self.delay)
+        z, self.pending = self.pending[:n], self.pending[n:]
         if self.line is not None and self.locked:          # follow the lead tone's drift line, sample by sample
             icpt, slope = self.line
             f = icpt + slope * (self.t_mix + np.arange(n)) - self.target
