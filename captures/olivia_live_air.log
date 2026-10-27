@@ -1,0 +1,26 @@
+08:50:47 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+08:50:47 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+08:50:51 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+08:50:51 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+A: loading the transceiver firmware on COM4 (about 8 s) ...
+A: COM4: receiving on 2394.250 MHz
+B: loading the transceiver firmware on COM5 (about 8 s) ...
+B: COM5: receiving on 2394.250 MHz
+08:51:21 TX: off (finished; underruns 0)
+  A: TX 2394.250 MHz: Olivia 8/250, live (RX or Ctrl+R ends, Esc aborts)
+olivia-8/250   A->B: OK  29 s on air, decoded 'CQ CQ DE W4DQB/EXP LIVE TEST PSE K'
+08:51:56 TX: off (finished; underruns 0)
+  B: TX 2394.250 MHz: Olivia 8/250, live (RX or Ctrl+R ends, Esc aborts)
+olivia-8/250   B->A: OK  29 s on air, decoded 'CQ CQ DE W4DQB/EXP LIVE TEST PSE K'
+08:52:31 TX: off (finished; underruns 0)
+  A: TX 2394.250 MHz: Olivia 16/500, live (RX or Ctrl+R ends, Esc aborts)
+olivia-16/500  A->B: OK  29 s on air, decoded 'CQ CQ DE W4DQB/EXP LIVE TEST PSE K'
+08:53:06 TX: off (finished; underruns 0)
+  B: TX 2394.250 MHz: Olivia 16/500, live (RX or Ctrl+R ends, Esc aborts)
+olivia-16/500  B->A: OK  29 s on air, decoded 'CQ CQ DE W4DQB/EXP LIVE TEST PSE K'
+
+summary
+  olivia-8/250   A->B: OK
+  olivia-8/250   B->A: OK
+  olivia-16/500  A->B: OK
+  olivia-16/500  B->A: OK

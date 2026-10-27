@@ -1,0 +1,24 @@
+09:28:52 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+09:28:52 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+09:28:56 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+09:28:56 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+09:29:18 TX: off (finished; underruns 0)
+[after A sent] A status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  0.0'
+[after A sent] A rx pane: '\nCQ DE W4DQB/EXP TEST K\n'
+[after A sent] B status: 'mode Olivia 8/250'   stats: 'Olivia 8/250: searching   block quality  3.3'
+[after A sent] B rx pane: 'CQ DE W4DQB/EXP TEST K'
+09:29:54 TX: off (finished; underruns 0)
+[after B sent] A status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  3.4'
+[after B sent] A rx pane: '\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K'
+[after B sent] B status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  3.3'
+[after B sent] B rx pane: 'CQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\n'
+09:30:30 TX: off (finished; underruns 0)
+[after A sent] A status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  3.4'
+[after A sent] A rx pane: '\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\n'
+[after A sent] B status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  3.3'
+[after A sent] B rx pane: 'CQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K'
+09:31:06 TX: off (finished; underruns 0)
+[after B sent] A status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  3.7'
+[after B sent] A rx pane: '\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K'
+[after B sent] B status: 'transmission over'   stats: 'Olivia 8/250: searching   block quality  3.3'
+[after B sent] B rx pane: 'CQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\nCQ DE W4DQB/EXP TEST K\n'
