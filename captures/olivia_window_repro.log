@@ -1,0 +1,172 @@
+09:25:29 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+09:25:29 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+09:25:32 TX: spaces go -12000 Hz (the other way would leave the records' reach)
+09:25:32 TX: dial 2394.250000 MHz, LO 2394.235382 MHz nominal, dial offset +14618 Hz
+    0.0  B: afc - shift      +0 peak       0 | olivia - df     +0 q  0.0
+    1.0  B: afc - shift      +0 peak       0 | olivia - df     +0 q  0.0
+    2.0  B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+    3.0  B: afc - shift      +0 peak      22 | olivia - df     +0 q  0.0
+    4.0  B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+    5.0  B: afc - shift      +0 peak      18 | olivia - df     +0 q  0.0
+    6.0  B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+    7.0  B: afc - shift      +0 peak      15 | olivia - df     +0 q  0.0
+    8.0  B: afc - shift      +0 peak      18 | olivia - df     +0 q  0.0
+    9.0  B: afc - shift      +0 peak      16 | olivia - df     +0 q  0.0
+   10.0  B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+   11.1  B: afc - shift      +0 peak      24 | olivia - df     +0 q  0.0
+   12.1  B: afc - shift      +0 peak      18 | olivia - df     +0 q  0.0
+   13.1  B: afc - shift      +0 peak      15 | olivia - df     +0 q  0.0
+   14.1  B: afc - shift      +0 peak      16 | olivia - df     +0 q  0.0
+   15.1  B: afc - shift      +0 peak      15 | olivia - df     +0 q  0.0
+   16.1  B: afc - shift      +0 peak      18 | olivia - df     +0 q  0.0
+   17.1  B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+   18.1  B: afc - shift      +0 peak      14 | olivia - df     +0 q  0.0
+   19.1  B: afc - shift      +0 peak      23 | olivia - df     +0 q  0.0
+--- A->B, before: B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+    0.0  B: afc - shift      +0 peak      17 | olivia - df     +0 q  0.0
+    1.0  B: afc L shift   -1047 peak   16288 | olivia - df     +0 q  0.0
+    2.0  B: afc L shift   -1075 peak   17551 | olivia - df     +0 q  0.0
+    3.0  B: afc L shift   -1099 peak   12963 | olivia L df    +31 q  3.1
+    4.0  B: afc L shift   -1126 peak   14396 | olivia L df    +51 q  3.4
+    5.0  B: afc L shift   -1154 peak   10420 | olivia L df    +77 q  3.3
+    6.0  B: afc L shift   -1182 peak    7696 | olivia L df   +106 q  3.2
+    7.0  B: afc L shift   -1209 peak    5684 | olivia L df   +136 q  3.6
+    8.0  B: afc L shift   -1237 peak    4114 | olivia L df   +164 q  3.2
+    9.0  B: afc L shift   -1265 peak    3038 | olivia L df   +193 q  3.3
+   10.1  B: afc L shift   -1293 peak    2199 | olivia L df   +219 q  5.1
+   11.1  B: afc L shift   -1320 peak    1624 | olivia L df   +246 q  3.7
+   12.1  B: afc L shift   -1347 peak    1200 | olivia L df   +270 q  3.2
+   13.1  B: afc L shift   -1375 peak     868 | olivia L df   +297 q  3.1
+   14.1  B: afc L shift   -1403 peak     641 | olivia L df   +322 q  3.2
+   15.1  B: afc L shift   -1430 peak     551 | olivia L df   +350 q  3.0
+   16.1  B: afc L shift   -1458 peak     407 | olivia L df   +378 q  3.3
+   17.1  B: afc L shift   -1486 peak     398 | olivia L df   +408 q  3.2
+   18.1  B: afc L shift   -1513 peak     294 | olivia L df   +435 q  3.4
+09:26:11 TX: off (finished; underruns 0)
+    0.0  B: afc L shift   -1530 peak     245 | olivia L df   +454 q 30.7
+    1.0  B: afc L shift   -1557 peak     181 | olivia L df   +474 q  3.5
+    2.0  B: afc L shift   -1585 peak     131 | olivia L df   +479 q  3.1
+    3.0  B: afc - shift   -1609 peak      97 | olivia L df   +511 q  3.1
+    4.0  B: afc - shift   -1609 peak      70 | olivia L df   +513 q  3.3
+A->B: decoded 'CQ DE W4DQB/EXP TEST K'
+    0.0  B: afc - shift   -1609 peak      52 | olivia L df   +535 q  3.2
+    1.0  B: afc - shift   -1609 peak      38 | olivia L df   +530 q  3.3
+    2.0  B: afc - shift   -1609 peak      28 | olivia - df   +530 q  3.2
+    3.0  B: afc - shift   -1609 peak      20 | olivia - df   +530 q  3.2
+    4.0  B: afc - shift   -1609 peak      16 | olivia - df   +530 q  3.2
+    5.0  B: afc - shift   -1609 peak      12 | olivia - df   +530 q  3.2
+    6.0  B: afc - shift   -1609 peak      14 | olivia - df   +530 q  3.2
+    7.0  B: afc - shift   -1609 peak      15 | olivia - df   +530 q  3.2
+    8.0  B: afc - shift   -1609 peak      19 | olivia - df   +530 q  3.2
+    9.0  B: afc - shift   -1609 peak      17 | olivia - df   +530 q  3.2
+--- B->A, before: A: afc - shift      +0 peak      13 | olivia - df     +0 q  0.0
+    0.0  A: afc - shift      +0 peak      13 | olivia - df     +0 q  0.0
+    1.0  A: afc L shift    +614 peak  119928 | olivia - df     +0 q  0.0
+    2.0  A: afc L shift    +503 peak   86803 | olivia - df     +0 q  0.0
+    3.0  A: afc L shift    +392 peak   64110 | olivia - df     +0 q  0.0
+    4.0  A: afc L shift    +284 peak   47350 | olivia L df     +1 q  3.4
+    5.0  A: afc L shift    +173 peak   34272 | olivia L df    +30 q  3.2
+    6.0  A: afc L shift     +61 peak   25312 | olivia L df    +94 q  3.1
+    7.1  A: afc L shift     -50 peak   18321 | olivia L df   +128 q  3.3
+    8.1  A: afc L shift    -161 peak   13531 | olivia L df   +162 q  3.0
+    9.1  A: afc L shift    -269 peak    9994 | olivia L df   +200 q  3.4
+   10.1  A: afc L shift    -380 peak    7233 | olivia L df   +240 q  3.2
+   11.1  A: afc L shift    -492 peak    5985 | olivia L df   +281 q  3.8
+   12.1  A: afc L shift    -600 peak    4420 | olivia L df   +316 q  3.8
+   13.1  A: afc L shift    -711 peak    3470 | olivia L df   +361 q  3.4
+   14.1  A: afc L shift    -822 peak    3820 | olivia L df   +405 q  3.2
+   15.1  A: afc L shift    -933 peak    2821 | olivia L df   +456 q  3.1
+   16.1  A: afc L shift   -1041 peak    2084 | olivia L df   +500 q  3.2
+   17.1  A: afc L shift   -1153 peak    1508 | olivia L df   +551 q  3.7
+   18.1  A: afc L shift   -1264 peak    1114 | olivia L df   +603 q  3.4
+09:26:45 TX: off (finished; underruns 0)
+    0.0  A: afc L shift   -1316 peak     967 | olivia L df   +627 q  3.4
+    1.0  A: afc L shift   -1428 peak     700 | olivia L df   +680 q  3.5
+    2.0  A: afc L shift   -1536 peak     517 | olivia L df   +756 q  3.2
+    3.0  A: afc L shift   -1647 peak     382 | olivia L df   +869 q  3.1
+    4.0  A: afc - shift   -1647 peak     276 | olivia L df   +972 q  3.2
+B->A: decoded 'CQ DE W4DQB/EXP TEST K'
+    0.0  A: afc - shift   -1647 peak     204 | olivia L df  +1006 q  3.4
+    1.0  A: afc - shift   -1647 peak     151 | olivia L df  +1000 q  3.0
+    2.0  A: afc - shift   -1647 peak     109 | olivia - df  +1000 q  3.2
+    3.0  A: afc - shift   -1647 peak      81 | olivia - df  +1000 q  3.2
+    4.0  A: afc - shift   -1647 peak      60 | olivia - df  +1000 q  3.2
+    5.0  A: afc - shift   -1647 peak      44 | olivia - df  +1000 q  3.2
+    6.0  A: afc - shift   -1647 peak      32 | olivia - df  +1000 q  3.2
+    7.0  A: afc - shift   -1647 peak      23 | olivia - df  +1000 q  3.2
+    8.0  A: afc - shift   -1647 peak      17 | olivia - df  +1000 q  3.2
+    9.0  A: afc - shift   -1647 peak      19 | olivia - df  +1000 q  3.2
+--- A->B, before: B: afc - shift      +0 peak      16 | olivia - df   +530 q  3.2
+    0.0  B: afc - shift      +0 peak      16 | olivia - df   +530 q  3.2
+    1.0  B: afc L shift    +434 peak   59952 | olivia - df   +530 q  3.2
+    2.0  B: afc L shift    +374 peak   44278 | olivia - df   +530 q  3.2
+    3.0  B: afc L shift    +319 peak   32049 | olivia - df   +530 q  3.2
+    4.0  B: afc L shift    +261 peak   23670 | olivia L df    +46 q  3.5
+    5.1  B: afc L shift    +205 peak   17482 | olivia L df    +74 q  3.4
+    6.1  B: afc L shift    +147 peak   12653 | olivia L df   +106 q  3.4
+    7.1  B: afc L shift     +89 peak    9345 | olivia L df   +141 q  3.4
+    8.1  B: afc L shift     +31 peak    6764 | olivia L df   +176 q  3.2
+    9.1  B: afc L shift     -26 peak    4996 | olivia L df   +210 q  3.1
+   10.1  B: afc L shift     -84 peak    3690 | olivia L df   +247 q  5.1
+   11.1  B: afc L shift    -142 peak    2725 | olivia L df   +287 q  3.8
+   12.1  B: afc L shift    -198 peak    2013 | olivia L df   +323 q  3.8
+   13.1  B: afc L shift    -256 peak    1457 | olivia L df   +362 q  3.1
+   14.1  B: afc L shift    -314 peak    1076 | olivia L df   +398 q  3.2
+   15.1  B: afc L shift    -372 peak     779 | olivia L df   +437 q  3.1
+   16.1  B: afc L shift    -428 peak     815 | olivia L df   +478 q  3.5
+   17.1  B: afc L shift    -486 peak    1928 | olivia L df   +518 q  3.1
+   18.1  B: afc L shift    -544 peak    1395 | olivia L df   +553 q  3.4
+09:27:19 TX: off (finished; underruns 0)
+    0.0  B: afc L shift    -578 peak    1163 | olivia L df   +575 q  3.1
+    1.0  B: afc L shift    -636 peak     859 | olivia L df   +592 q  3.1
+    2.0  B: afc L shift    -694 peak     635 | olivia L df   +592 q  3.5
+    3.0  B: afc - shift    -745 peak     469 | olivia L df   +597 q  3.2
+    4.0  B: afc - shift    -745 peak     339 | olivia L df   +609 q  3.4
+A->B: decoded 'CQ DE W4DQB/EXP TEST K'
+    0.0  B: afc - shift    -745 peak     251 | olivia L df   +609 q  3.2
+    1.0  B: afc - shift    -745 peak     185 | olivia L df   +593 q  3.3
+    2.0  B: afc - shift    -745 peak     134 | olivia - df   +590 q  3.5
+    3.0  B: afc - shift    -745 peak      99 | olivia - df   +590 q  3.5
+    4.0  B: afc - shift    -745 peak      73 | olivia - df   +590 q  3.5
+    5.0  B: afc - shift    -745 peak      53 | olivia L df   +134 q  3.0
+    6.0  B: afc - shift    -745 peak      39 | olivia L df   +131 q  3.2
+    7.0  B: afc - shift    -745 peak      29 | olivia L df   +133 q  3.4
+    8.0  B: afc - shift    -745 peak      21 | olivia L df   +130 q  3.2
+    9.0  B: afc - shift    -745 peak      16 | olivia L df   +136 q  3.1
+--- B->A, before: A: afc - shift      +0 peak      18 | olivia - df  +1000 q  3.2
+    0.0  A: afc - shift      +0 peak      18 | olivia - df  +1000 q  3.2
+    1.0  A: afc L shift    -379 peak   14765 | olivia - df  +1000 q  3.2
+    2.0  A: afc L shift    -479 peak   10687 | olivia - df  +1000 q  3.2
+    3.0  A: afc L shift    -577 peak    7893 | olivia - df  +1000 q  3.2
+    4.0  A: afc L shift    -676 peak    5713 | olivia L df    -25 q  3.3
+    5.0  A: afc L shift    -776 peak    4219 | olivia L df     +4 q  3.2
+    6.0  A: afc L shift    -872 peak    3116 | olivia L df    +70 q  3.4
+    7.1  A: afc L shift    -972 peak    2737 | olivia L df   +103 q  3.3
+    8.1  A: afc L shift   -1071 peak    3215 | olivia L df   +174 q  3.1
+    9.1  A: afc L shift   -1168 peak    5583 | olivia L df   +215 q  3.2
+   10.1  A: afc L shift   -1267 peak    4061 | olivia L df   +248 q  3.1
+   11.1  A: afc L shift   -1366 peak    5137 | olivia L df   +277 q  3.9
+   12.1  A: afc L shift   -1463 peak    4538 | olivia L df   +310 q  3.9
+   13.1  A: afc L shift   -1562 peak    3490 | olivia L df   +346 q  3.4
+   14.1  A: afc L shift   -1662 peak    4643 | olivia L df   +384 q  3.1
+   15.1  A: afc L shift   -1761 peak    4767 | olivia L df   +430 q  3.0
+   16.1  A: afc L shift   -1858 peak    5407 | olivia L df   +469 q  3.1
+   17.1  A: afc L shift   -1957 peak    6523 | olivia L df   +512 q  3.1
+   18.1  A: afc L shift   -2057 peak    4818 | olivia L df   +566 q  3.5
+09:27:52 TX: off (finished; underruns 0)
+    0.0  A: afc L shift   -2104 peak    4183 | olivia L df   +588 q  3.3
+    1.0  A: afc L shift   -2203 peak    3027 | olivia L df   +599 q  3.4
+    2.0  A: afc L shift   -2303 peak    2236 | olivia L df   +605 q  3.5
+    3.0  A: afc - shift   -2399 peak    1618 | olivia L df   +608 q  3.0
+    4.0  A: afc - shift   -2399 peak    1195 | olivia L df   +603 q  3.1
+B->A: decoded 'CQ DE W4DQB/EXP TEST K'
+    0.0  A: afc - shift   -2399 peak     883 | olivia L df   +604 q  3.5
+    1.0  A: afc - shift   -2399 peak     639 | olivia L df   +604 q  4.0
+    2.0  A: afc - shift   -2399 peak     472 | olivia - df   +603 q  3.3
+    3.0  A: afc - shift   -2399 peak     349 | olivia - df   +603 q  3.3
+    4.0  A: afc - shift   -2399 peak     257 | olivia - df   +603 q  3.3
+    5.0  A: afc - shift   -2399 peak     186 | olivia - df   +603 q  3.3
+    6.0  A: afc - shift   -2399 peak     138 | olivia - df   +603 q  3.3
+    7.0  A: afc - shift   -2399 peak     102 | olivia - df   +603 q  3.3
+    8.0  A: afc - shift   -2399 peak      74 | olivia - df   +603 q  3.3
+    9.0  A: afc - shift   -2399 peak      54 | olivia - df   +603 q  3.3

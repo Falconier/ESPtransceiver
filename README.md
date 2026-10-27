@@ -175,6 +175,11 @@ In both, the window works like this:
 - **Mode** (per-board station): CW, Feld Hell, Olivia 8/250 or Olivia 16/500. In Hell mode the receive area shows the scrolling
   Hell image instead of text, with **Auto phase** and a **Phase** slider to keep letters whole. In Olivia the status line shows
   lock, offset and decode quality; keep the lead tone on (the receiver's AFC needs it).
+- **Olivia transmit pane** (per-board station), as in fldigi: type into the transmit pane before or during a transmission.
+  **TX** (Ctrl+T) starts with the lead tone, then sends what you have typed block by block (3 or 4 characters per 2 s block;
+  idle blocks go out while you pause). Sent text turns grey and appears in the receive pane; text not sent yet can still be
+  edited. **RX** (Ctrl+R) returns to receive once the typed text is out; **Abort** (Esc) stops after the block on its way.
+  **Send ID** adds `DE <call>` to the pane (and transmits it if you are receiving). One transmission lasts at most 10 minutes.
 - **Frequency:** type MHz (2300.005–2449.995) and press Apply; both boards retune.
 - **Receive / decode:** decoded text, speed (WPM), signal (dB) and the AFC tone; **Monitor** and **Vol** play the receive audio
   (noise and CW) on the default speakers (`--monitor-device` picks another).
@@ -195,6 +200,8 @@ In both, the window works like this:
 | `hell.py` | Feld Hellschreiber: font, encoder, receiver (image columns) |
 | `olivia.py` | Olivia: codec, tone plan, transmitter records, reference modulator |
 | `olivia_rx.py` | Olivia receiver: acquisition, drift tracking, timing and block sync |
+| `scripts/olivia_live_check.py` | Offline check of live Olivia transmit: streamed records, typing session, decode |
+| `scripts/olivia_live_air.py` | On-air check of live Olivia transmit between two boards, both ways |
 | `espdr_fldigi.py` | Receive chain (rtl_tcp client, AFC, demodulator), CW keyer and transmitter control; also an fldigi bridge |
 | `decim16-firmware.patch` | Receiver firmware change: decimation 16 (62.5 ksps) |
 | `espdr-windows.patch` | Fixes and additions to the installed `espdr` package for Windows |

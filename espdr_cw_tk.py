@@ -220,8 +220,37 @@ class Window:
 
         txf = ttk.LabelFrame(root, text="Transmit / encode")
         txf.pack(fill="x", **pad)
+        self.txf = txf
+        # Olivia, as in fldigi: type into the transmit pane before or while transmitting. Text in grey has gone out; the
+        # rest is sent block by block, and can still be changed until then.
+        self.live = ttk.Frame(txf)
+        self.txtext = tk.Text(self.live, height=4, wrap="word", font=("Consolas", 13), undo=False)
+        tsb = ttk.Scrollbar(self.live, command=self.txtext.yview)
+        self.txtext.configure(yscrollcommand=tsb.set)
+        self.txtext.tag_configure("sent", foreground="gray55")
+        self.txtext.mark_set("sent", "1.0")
+        self.txtext.mark_gravity("sent", "left")
+        self.txtext.bind("<Key>", self.tx_key)
+        self.txtext.bind("<KeyRelease>", lambda e: self.push_pending())
+        self.txtext.bind("<Control-t>", lambda e: (self.live_tx(), "break")[1])
+        self.txtext.bind("<Control-r>", lambda e: (self.live_rx(), "break")[1])
+        self.txtext.bind("<Escape>", lambda e: (self.live_abort(), "break")[1])
+        lbtn = ttk.Frame(self.live)
+        lbtn.pack(side="right", fill="y", padx=(6, 0))
+        self.txbtn = ttk.Button(lbtn, text="TX", width=7, command=self.live_tx)
+        self.txbtn.pack(fill="x")
+        self.rxbtn = ttk.Button(lbtn, text="RX", width=7, command=self.live_rx)
+        self.rxbtn.pack(fill="x", pady=2)
+        self.abortbtn = ttk.Button(lbtn, text="Abort", width=7, command=self.live_abort)
+        self.abortbtn.pack(fill="x")
+        ttk.Button(lbtn, text="Clear", width=7, command=self.clear_tx).pack(fill="x", pady=(2, 0))
+        tsb.pack(side="right", fill="y")
+        self.txtext.pack(side="left", fill="both", expand=True)
+        self.live_on = False                     # a live transmission from this pane is running
+        self.acked = 0                           # characters of it marked as sent
         line = ttk.Frame(txf)
         line.pack(fill="x", padx=4, pady=4)
+        self.line = line
         self.msg = tk.StringVar()
         self.msg.trace_add("write", lambda *_: self.preview())
         entry = ttk.Entry(line, textvariable=self.msg, font=("Consolas", 13))
@@ -293,6 +322,13 @@ class Window:
         if err:
             self.say(err)
             return
+        if self.cur_mode().startswith("olivia-") and hasattr(self.radio, "start_live"):
+            self.line.pack_forget()
+            self.live.pack(fill="x", padx=4, pady=4, before=self.code)
+            self.txtext.focus_set()
+        else:
+            self.live.pack_forget()
+            self.line.pack(fill="x", padx=4, pady=4, before=self.code)
         if self.cur_mode() == "hell":
             self.rxtext.pack_forget()
             self.hell_canvas.pack(fill="both", expand=True, padx=4, pady=4, before=self.rx_row)
@@ -303,6 +339,85 @@ class Window:
             self.rxtext.pack(fill="both", expand=True, padx=4, pady=4, before=self.rx_row)
         self.preview()
         self.say(f"mode {self.mode_name.get()}")
+
+    # -- Olivia transmit pane
+    def tx_key(self, e):
+        """Keeps the text that has gone out as it is: typing there goes to the end instead, deleting into it is refused."""
+        t = self.txtext
+        if e.keysym in ("Left", "Right", "Up", "Down", "Home", "End", "Prior", "Next") or e.state & 0x4:
+            return None
+        sel = t.tag_ranges("sel")
+        if sel and t.compare(sel[0], "<", "sent"):
+            if e.keysym in ("BackSpace", "Delete"):
+                return "break"
+            t.tag_remove("sel", "1.0", "end")
+            t.mark_set("insert", "end")
+        elif t.compare("insert", "<", "sent") or (e.keysym == "BackSpace" and t.compare("insert", "==", "sent")):
+            if e.keysym in ("BackSpace", "Delete"):
+                return "break"
+            t.mark_set("insert", "end")
+        if e.char and e.keysym not in ("BackSpace", "Delete") and e.char not in "\r\n\t" and not 32 <= ord(e.char) < 127:
+            self.say("Olivia carries 7-bit ASCII only")
+            return "break"
+        return None
+
+    def pending_text(self):
+        return self.txtext.get("sent", "end-1c")
+
+    def push_pending(self):
+        if self.live_on:
+            self.radio.set_pending(self.pending_text(), self.acked)
+        self.preview()
+
+    def live_tx(self):
+        if self.live_on:
+            return
+        err = self.radio.start_live(self.args.lead if self.lead.get() else 0)
+        if err:
+            self.say(err)
+            return
+        self.live_on, self.acked = True, 0
+        self.push_pending()
+        self.append("\n", "tx")
+
+    def live_rx(self):
+        if self.live_on:
+            self.radio.end_live()
+            self.say("ending after the typed text (idle blocks are not sent any more)")
+
+    def live_abort(self):
+        if self.live_on:
+            self.radio.abort_live()
+            self.say("aborting: the block on its way still goes out")
+
+    def clear_tx(self):
+        if self.live_on:                          # keep what is waiting to go out
+            self.txtext.delete("1.0", "sent")
+        else:
+            self.txtext.delete("1.0", "end")
+            self.txtext.mark_set("sent", "1.0")
+
+    def live_poll(self):
+        """Marks the characters the transmitter took as sent (and echoes them in the receive pane, as fldigi does)."""
+        r = self.radio
+        n = getattr(r, "live_sent", 0) - self.acked
+        if self.live_on and n > 0:
+            t = self.txtext
+            new = t.index(f"sent + {n} chars")
+            self.append(t.get("sent", new), "tx")
+            t.tag_add("sent", "sent", new)
+            t.mark_set("sent", new)
+            self.acked += n
+            self.push_pending()
+        if self.live_on and not r.sending:
+            self.live_on = False
+            self.append("\n", "tx")
+            left = len(self.pending_text())
+            self.say("transmission over" + (f": {left} characters not sent" if left else ""))
+        state = "disabled" if not r.ready else "normal"
+        self.txbtn.configure(state="disabled" if r.sending or not r.tx else state)
+        self.rxbtn.configure(state="normal" if self.live_on else "disabled")
+        self.abortbtn.configure(state="normal" if self.live_on else "disabled")
 
     def draw_hell(self):
         width = max(self.hell_canvas.winfo_width(), 200)
@@ -322,8 +437,14 @@ class Window:
     def preview(self):
         if self.cur_mode().startswith("olivia-"):
             import olivia
-            text = " ".join(self.msg.get().split())
+            live = self.live.winfo_manager() != ""
+            text = self.pending_text() if live else " ".join(self.msg.get().split())
             m = olivia.Mode(self.cur_mode().split("-", 1)[1])
+            if live:
+                secs = -(-len(text) // m.bits) * olivia.BLOCK * m.symbol_s
+                self.code.configure(text=f"Olivia {m.name}: {len(text)} characters to send, {secs:.1f} s   "
+                                         "(Ctrl+T transmit, Ctrl+R back to receive after the text, Esc abort)")
+                return
             secs = -(-len(text) // m.bits) * olivia.BLOCK * m.symbol_s if text else 0
             self.code.configure(text=f"Olivia {m.name}: {len(text)} characters, {secs:.1f} s after the lead tone" if text else "")
             return
@@ -366,6 +487,15 @@ class Window:
         call = self.call.get().strip().upper()
         if not call:
             self.say("enter your call sign first")
+            return
+        if self.live.winfo_manager():              # Olivia: into the transmit pane, as an fldigi macro would
+            t = self.txtext
+            t.insert("end", ("" if t.get("end-2c", "end-1c") in ("", " ", "\n") else " ") + f"DE {call} ")
+            t.see("end")
+            if not self.live_on:
+                self.live_tx()
+                self.radio.end_live()
+            self.push_pending()
             return
         self._start_tx(f"DE {call}", self.args.lead if self.lead.get() else 0)
 
@@ -421,6 +551,7 @@ class Window:
                 self.draw_hell()
         while not r.text.empty():
             self.append(r.text.get_nowait())
+        self.live_poll()
         while not r.log.empty():
             self.say(r.log.get_nowait())
         if r.sending:
