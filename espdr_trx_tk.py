@@ -84,7 +84,8 @@ def main():
     p.add_argument("--image", default=resource("release/esp32-sdr-trx-trx-decim16.bin"),
                    help="transceiver firmware (TX image, decimation 16)")
     p.add_argument("--dial", type=float, default=2394.250, help="start frequency in MHz (default 2394.250)")
-    p.add_argument("--rx-gain", type=int, default=0, help="receiver gain selector (default 0: the boards are close)")
+    p.add_argument("--rx-gain", type=int, default=0, help="receiver gain selector (default 0: the boards are close; a distant beacon: 40)")
+    p.add_argument("--rx-shift", type=int, default=4, help="right shift of the 8-bit receive samples, 0..12 (default 4; with --rx-gain 40: 2)")
     p.add_argument("--rx-ppm", type=float, default=0.0)
     p.add_argument("--tx-ppm", type=float, default=0.0)
     p.add_argument("--power", type=float, default=0.0, help="transmit power in dB (0 .. -17.9)")

@@ -103,9 +103,11 @@ class Transceiver:
             self.restart = False
             try:
                 self.link.ser.timeout = 0.05
-                lo = nb.configure_receiver(self.link, int(round(freq / (1 + a.rx_ppm * 1e-6))), DECIM, nb.FORMATS["cs8"], 4,
-                                           a.rx_gain)
+                lo = nb.configure_receiver(self.link, int(round(freq / (1 + a.rx_ppm * 1e-6))), DECIM, nb.FORMATS["cs8"],
+                                           getattr(a, "rx_shift", 4), a.rx_gain)
                 self.fine_hz = lo * (1 + a.rx_ppm * 1e-6) - freq
+                if self.afc is not None:
+                    self.afc.dc_hz = self.fine_hz        # the DSP thread moves DC by the fine offset: the LO leakage sits there
                 self.link.run(0, lambda h, p: self._queue(p, h["format"]),
                               stop_flag=lambda: self.stopping.is_set() or self.hold.is_set() or self.restart)
             except Exception as e:                               # noqa: BLE001 - keep receiving; shown in the window

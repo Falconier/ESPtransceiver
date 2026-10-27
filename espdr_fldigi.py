@@ -90,6 +90,9 @@ class RxAfc:
 
     def __init__(self, target_hz, span_hz=16000.0, space_hz=12000.0):   # +-16 kHz: boards differ by up to ~13 kHz (crystals)
         self.space_hz = space_hz    # the transmitters' CW space shift: a line this far from our carrier is its own key-up
+        self.lock_ratio = 1e4       # a plain-spectrum peak this far over the floor (40 dB) is locked on without the ratio test
+        self.track_ratio = 10       # a locked carrier is followed while it stays this far over the floor (10 dB: weak beacons too)
+        self.dc_hz = 0.0            # where the receiver's LO leakage sits after its fine tuning (the station sets it); never a carrier
         self.N = 1 << int(round(np.log2(RTL_RATE * 0.065)))     # ~65 ms per spectrum at any rate (16384 at 250 ksps)
         self.target = target_hz
         self.f = np.fft.fftshift(np.fft.fftfreq(self.N, 1 / RTL_RATE))
@@ -108,6 +111,7 @@ class RxAfc:
         self.hold_after_lock = False
         self.quiet = 0
         self.cand_hz, self.cand_n = None, 0     # hold mode locks only on a steady carrier: same frequency for 5 frames
+        self.new_hz = None                      # where the last frame's new signal was (a new signal must repeat to count)
         # Hold mode also measures the lead tone while it lasts and fits a line (frequency against sample time): the drift. The
         # mixing then follows that line through the message, so the mode's receiver sees almost no drift (150 Hz/s defeated it).
         self.lead = []                          # (sample index, Hz) of the lead tone since the lock
@@ -138,6 +142,13 @@ class RxAfc:
             return
         ratio = p / (np.median(self.hist, axis=0) + 1e-9)
         ratio[~self.band] = 0
+        # The receiver's LO leakage (dc_hz, from the station: its fine tuning moves DC there) is a narrow line, never a carrier: +-40 Hz
+        # around it is left out (two boards with close crystals put each other's carrier only ~100 Hz from it). Around it lies a comb of weaker spurs (+-2 kHz, up to ~25 dB): nothing is locked there without the ratio test,
+        # and a carrier there is followed only while it stays 20 dB up. Boards whose crystals are close put each other's signals
+        # in this zone, so it cannot simply be left out.
+        leak = np.abs(self.f - self.dc_hz) < 40
+        comb = np.abs(self.f - self.dc_hz) < 2000
+        ratio[leak] = 0
         k = int(np.argmax(ratio))
         self.peak = max(float(ratio[k]), self.peak * 0.98)  # decays ~4 dB in 3 s
         if self.hold_after_lock:
@@ -174,19 +185,28 @@ class RxAfc:
         # track_level is the tracked carrier's recent strength: only something comparable takes over (not a CW space, which the
         # transmitter moves 12 kHz away at -18 dB, nor a weak line), and while the carrier is there only something 10 dB stronger.
         floor = np.median(p[self.band]) + 1e-30
-        away = self.band & (np.abs(self.f) > 150)
-        kp = int(np.flatnonzero(away)[np.argmax(p[away])])
-        strong = p[kp] > 1e4 * floor
+        away = self.band & ~leak
+        clear = away & ~comb
+        kp = int(np.flatnonzero(clear)[np.argmax(p[clear])])
+        strong = p[kp] > self.lock_ratio * floor
         new_signal = ratio[k] >= 10 and ratio[k] >= self.peak / 16    # 10 dB over the usual spectrum, not a key-up/space
+        # ...and seen at the same frequency in the previous frame too: of ~1000 noise bins one passes 10 dB almost every frame, but
+        # never twice in the same place, while a carrier or a dash (>= 2 frames of 65 ms) does.
+        repeat = self.new_hz is not None and abs(self.f[k] - self.new_hz) < 30
+        self.new_hz = self.f[k] if new_signal else None
+        new_signal = new_signal and repeat
         if self.locked:
-            near = self.band & (np.abs(self.f - (self.shift + self.target)) < 400)
+            near = away & (np.abs(self.f - (self.shift + self.target)) < 400)
             kn = int(np.flatnonzero(near)[np.argmax(p[near])]) if near.any() else None
-            if kn is not None and p[kn] > 100 * floor:     # 20 dB: the key is down
+            # The key is down: 10 dB over the floor (20 dB in the spur comb), and within 15 dB of this carrier's recent strength, so
+            # that during a strong station's key-up a noise bump in the window is not taken for it.
+            if kn is not None and p[kn] > max((100 if comb[kn] else self.track_ratio) * floor, self.track_level / 30):
                 self.track_level = max(float(p[kn]), self.track_level * 0.98)
                 if strong and p[kp] > 10 * self.track_level and abs(self.f[kp] - self.f[kn]) > 400:
                     self._lock(p, kp)                      # a carrier 10 dB stronger elsewhere: go there
                 else:
-                    self.shift += 0.5 * (self._peak_hz(p, kn) - self.target - self.shift)
+                    gain = 0.5 if p[kn] > 1000 * floor else 0.1   # a weak carrier's peak is noisy: follow it slowly
+                    self.shift += gain * (self._peak_hz(p, kn) - self.target - self.shift)
                     self.track_miss = 0
                 return
             self.track_miss += 1
