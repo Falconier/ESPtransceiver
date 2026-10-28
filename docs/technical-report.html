@@ -1,0 +1,651 @@
+<title>ESPOlivia Technical Report</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a single reading column like a lab report, wide figures break out to the content width; blueprint ink on cool paper. */
+:root {
+  --paper: #f6f7f5;
+  --panel: #ffffff;
+  --ink: #18222b;
+  --muted: #5b6874;
+  --rule: #cfd6dc;
+  --accent: #0b6f78;      /* RF teal */
+  --signal: #b4531c;      /* keyed carrier / warnings */
+  --wash: #e6eef0;
+  --code-bg: #edf1f2;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --mono: "JetBrains Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1820; --panel: #15212b; --ink: #dfe7ec; --muted: #93a3b0; --rule: #2c3c49;
+    --accent: #4fc2cb; --signal: #ec8a52; --wash: #1a2a35; --code-bg: #1b2833; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1820; --panel: #15212b; --ink: #dfe7ec; --muted: #93a3b0; --rule: #2c3c49;
+  --accent: #4fc2cb; --signal: #ec8a52; --wash: #1a2a35; --code-bg: #1b2833; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--paper); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1060px; margin: 0 auto; padding-block: 40px 80px; display: grid; gap: 0; }
+.col { max-width: 720px; }
+h1, h2, h3, h4 { font-family: var(--display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 800; letter-spacing: -0.01em; }
+h2 { font-size: 1.65rem; font-weight: 700; margin-top: 3.2rem; padding-top: 1.2rem; border-top: 2px solid var(--ink); }
+h3 { font-size: 1.15rem; font-weight: 700; margin-top: 2rem; }
+p { margin: 0.8rem 0 0; }
+.eyebrow { font-family: var(--mono); font-size: 0.78rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.lede { font-size: 1.18rem; color: var(--muted); margin-top: 1rem; }
+.meta { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); margin-top: 1.2rem; display: flex; flex-wrap: wrap; gap: 6px 22px; }
+.warn { margin-top: 1.6rem; border: 1px solid var(--signal); border-left-width: 6px; padding: 14px 18px; background: var(--panel); font-size: 0.97rem; }
+.warn strong { color: var(--signal); font-family: var(--display); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font-family: var(--mono); font-size: 0.82rem; background: var(--code-bg); padding: 14px 16px; overflow-x: auto; border-radius: 4px; line-height: 1.5; margin: 1rem 0 0; }
+ul, ol { margin: 0.8rem 0 0; padding-left: 1.3rem; }
+li { margin-top: 0.35rem; }
+.toc { margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 28px; font-family: var(--display); font-size: 0.95rem; }
+.toc a { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--rule); padding: 6px 0; display: flex; gap: 10px; }
+.toc a span { font-family: var(--mono); color: var(--accent); min-width: 2.2em; }
+.toc a:hover, .toc a:focus-visible { color: var(--accent); }
+a { color: var(--accent); }
+a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+figure { margin: 1.6rem 0 0; }
+figure .frame { background: var(--panel); border: 1px solid var(--rule); padding: 14px; overflow-x: auto; }
+figcaption { font-size: 0.88rem; color: var(--muted); margin-top: 8px; max-width: 760px; }
+figcaption b { font-family: var(--display); color: var(--ink); }
+svg { display: block; max-width: none; height: auto; }
+svg text { font-family: var(--mono); fill: var(--ink); }
+svg .t-s { font-size: 11px; } svg .t-m { font-size: 13px; } svg .t-l { font-size: 15px; font-family: var(--display); font-weight: 700; }
+svg .t-mut { fill: var(--muted); } svg .t-acc { fill: var(--accent); } svg .t-sig { fill: var(--signal); }
+svg .box { fill: var(--panel); stroke: var(--ink); stroke-width: 1.4; }
+svg .box2 { fill: var(--wash); stroke: var(--ink); stroke-width: 1.2; }
+svg .chip { fill: var(--wash); stroke: var(--accent); stroke-width: 2; stroke-dasharray: 6 4; }
+svg .ln { stroke: var(--ink); stroke-width: 1.4; fill: none; }
+svg .lnacc { stroke: var(--accent); stroke-width: 2; fill: none; }
+svg .lnsig { stroke: var(--signal); stroke-width: 2; fill: none; }
+svg .lnmut { stroke: var(--muted); stroke-width: 1; fill: none; stroke-dasharray: 4 3; }
+svg .dot { fill: var(--ink); }
+svg .fill-acc { fill: var(--accent); } svg .fill-sig { fill: var(--signal); } svg .fill-paper { fill: var(--panel); }
+table { border-collapse: collapse; width: 100%; font-size: 0.93rem; margin-top: 1rem; font-variant-numeric: tabular-nums; }
+.tbl { overflow-x: auto; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--display); font-size: 0.82rem; letter-spacing: 0.03em; text-transform: uppercase; color: var(--muted); border-bottom: 2px solid var(--ink); }
+td.num { font-family: var(--mono); font-size: 0.85rem; white-space: nowrap; }
+.plain { background: var(--wash); padding: 14px 18px; margin-top: 1.2rem; border-radius: 4px; }
+.plain .eyebrow { display: block; margin-bottom: 4px; }
+.eq { font-family: var(--mono); font-size: 0.92rem; background: var(--panel); border: 1px solid var(--rule); padding: 10px 14px; margin-top: 1rem; overflow-x: auto; white-space: nowrap; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 1.4rem; }
+.kv div { background: var(--panel); border-top: 3px solid var(--accent); padding: 10px 12px; }
+.kv b { display: block; font-family: var(--display); font-size: 1.35rem; }
+.kv span { font-size: 0.85rem; color: var(--muted); }
+.status { font-family: var(--mono); font-size: 0.75rem; padding: 1px 7px; border-radius: 10px; border: 1px solid currentColor; white-space: nowrap; }
+.ok { color: var(--accent); } .part { color: var(--signal); }
+footer { margin-top: 4rem; font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1rem; }
+@media (max-width: 560px) { body { font-size: 16px; } h2 { font-size: 1.4rem; } }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+<header class="col">
+  <div class="eyebrow">Technical report · 13 cm amateur band · W4DQB/EXP</div>
+  <h1>ESPOlivia: a 13 cm transceiver and beacon built from ESP32-S3 Wi-Fi chips</h1>
+  <p class="lede">How two inexpensive dev boards, with no added radio hardware, send and receive Morse code, Feld Hellschreiber and Olivia on 2.3–2.4 GHz, and how a third board runs as a standalone beacon. From the chip in plain terms, through the circuit, to every stage of the firmware and the PC software.</p>
+  <div class="meta"><span>Project: Falconier/ESPtransceiver</span><span>Built on: jochenhammes/esp32-sdr-trx v1.0.0-rc4</span><span>Status as of 22 Oct 2026</span></div>
+  <div class="warn"><strong>Licence required to transmit.</strong> Everything here that transmits needs an amateur radio licence covering the frequency, the mode, power limits, identification and (for the beacon) unattended operation. The transmitter is a Wi-Fi chip's test tone: its power is estimated, not calibrated, and its harmonics and spurious emissions have not been measured.</div>
+  <nav class="toc" aria-label="Contents">
+    <a href="#overview"><span>1</span>The project in plain terms</a>
+    <a href="#chip"><span>2</span>The ESP32-S3, explained</a>
+    <a href="#system"><span>3</span>System architecture</a>
+    <a href="#board"><span>4</span>The board: circuit schematic</a>
+    <a href="#radio"><span>5</span>The radio inside the chip</a>
+    <a href="#firmware"><span>6</span>Firmware</a>
+    <a href="#host"><span>7</span>PC software</a>
+    <a href="#modes"><span>8</span>The three modes</a>
+    <a href="#beacon"><span>9</span>The standalone beacon</a>
+    <a href="#results"><span>10</span>Measurements and results</a>
+    <a href="#limits"><span>11</span>Limits, safety, band plan</a>
+    <a href="#appendix"><span>A</span>Glossary and file map</a>
+  </nav>
+</header>
+
+<!-- ============================================================ 1 -->
+<section id="overview" class="col">
+  <h2>1 · The project in plain terms</h2>
+  <p>Every ESP32-S3 contains a complete 2.4 GHz radio, normally used only for Wi-Fi and Bluetooth. That radio has the same building blocks as a general-purpose radio: an antenna connection, an amplifier, a frequency synthesizer, a mixer and a fast analog-to-digital converter. The open-source project <i>esp32-sdr-trx</i> found that, with the right register settings, the chip can be made to:</p>
+  <ul>
+    <li><b>listen</b> to any frequency from about 1.84 to 2.79 GHz and stream the raw radio signal to a PC, like a software-defined radio (SDR); and</li>
+    <li><b>transmit</b> a single carrier whose frequency and strength are updated thousands of times per second. That is enough to send Morse code, picture-text (Feld Hell) and multi-tone digital text (Olivia).</li>
+  </ul>
+  <p>This project turns that into working radio stations. Each board is plugged into a PC by USB; a Python program on the PC does all the signal processing, decoding and encoding, and shows a small window to type into and read from. Two boards on the same desk talk to each other like two amateur stations. A third board runs its own firmware with no PC at all and acts as a beacon: every 30 seconds it sends its call sign in Morse code or in Olivia.</p>
+  <div class="plain"><span class="eyebrow">Analogy</span>Think of the chip's radio as a car engine that only ever drives one route (Wi-Fi). The firmware takes the steering wheel away from the Wi-Fi software and drives it by hand: it points the radio at a frequency, opens the throttle (gain) and records what the engine "hears", or makes it hum at one precise pitch and taps that hum on and off in Morse code.</div>
+  <div class="kv">
+    <div><b>2394.250 MHz</b><span>station frequency (experimental two-way work)</span></div>
+    <div><b>2304.350 MHz</b><span>beacon frequency (US 2300–2310 MHz segment)</span></div>
+    <div><b>≈ −17 dBm</b><span>estimated transmit power (≈ 20 µW EIRP)</span></div>
+    <div><b>62.5 ksps</b><span>receive stream to the PC (8-bit I/Q)</span></div>
+  </div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section id="chip" class="col">
+  <h2>2 · The ESP32-S3, explained</h2>
+  <p>The ESP32-S3 is a microcontroller from Espressif: a small computer on one chip, with its own memory, input/output pins and radio. The boards in this project carry it inside a shielded module with a printed antenna.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Part</th><th>What it is</th><th>What this project uses it for</th></tr></thead>
+    <tbody>
+      <tr><td>2 × Xtensa LX7 cores, 240 MHz</td><td>The processors. They run code from internal RAM.</td><td>Core 0 runs the command loop and transmitter; both cores decimate the receive samples in parallel.</td></tr>
+      <tr><td>512 KB internal SRAM</td><td>Fast working memory.</td><td>The whole firmware runs from it. Four 64 KB banks hold raw radio samples.</td></tr>
+      <tr><td>Flash (16 MB on the beacon board), PSRAM (8 MB)</td><td>Program storage that survives power-off; extra RAM.</td><td>The stations don't use flash at all (they load into RAM). The beacon's firmware is stored in flash at address 0.</td></tr>
+      <tr><td>2.4 GHz radio</td><td>Wi-Fi/Bluetooth transceiver: amplifiers, mixer, synthesizer, converters.</td><td>Repurposed as a general receiver (1.84–2.79 GHz) and a steerable single-carrier transmitter (2300–2450 MHz in this project).</td></tr>
+      <tr><td>USB Serial/JTAG</td><td>A built-in USB device: appears on the PC as a serial port, with no extra chip.</td><td>Commands, the receive stream and the transmit records all travel over it.</td></tr>
+      <tr><td>Boot ROM</td><td>Fixed code that runs at reset.</td><td>Loads firmware over USB into RAM (download mode), or boots the beacon from flash.</td></tr>
+      <tr><td>GPIO0, GPIO48</td><td>General-purpose pins.</td><td>GPIO0 is the BOOT button (the beacon's mode button); GPIO48 drives the RGB status LED.</td></tr>
+    </tbody>
+  </table></div>
+  <p>The key point: none of this needs extra parts. The antenna on the module, the radio and the USB port are enough for a complete, if very low-power, microwave station.</p>
+</section>
+
+<!-- ============================================================ 3 -->
+<section id="system">
+  <div class="col">
+  <h2>3 · System architecture</h2>
+  <p>Three boards, three roles. Each station board is driven entirely by its PC program over one USB cable; the beacon board only needs power.</p>
+  </div>
+  <figure>
+    <div class="frame">
+    <svg viewBox="0 0 1000 330" width="1000" role="img" aria-label="System block diagram: two PCs each connected by USB to a station board, the boards linked over the air at 2394.250 MHz, and a standalone beacon board transmitting on 2304.350 MHz">
+      <!-- PC A -->
+      <rect class="box" x="20" y="40" width="200" height="120" rx="4"/>
+      <text class="t-l" x="35" y="66">PC (station A)</text>
+      <text class="t-s t-mut" x="35" y="88">espdr_trx_tk.py window</text>
+      <text class="t-s t-mut" x="35" y="104">trx_board.Transceiver</text>
+      <text class="t-s t-mut" x="35" y="120">DSP, AFC, decoders</text>
+      <text class="t-s t-mut" x="35" y="136">mode encoders → records</text>
+      <!-- USB A -->
+      <line class="ln" x1="220" y1="100" x2="300" y2="100"/>
+      <text class="t-s" x="232" y="92">USB 2.0 FS</text>
+      <text class="t-s t-mut" x="232" y="120">cmds · I/Q · records</text>
+      <!-- Board A -->
+      <rect class="box2" x="300" y="55" width="150" height="90" rx="4"/>
+      <text class="t-l" x="314" y="80">Board A</text>
+      <text class="t-s t-mut" x="314" y="100">ESP32-S3</text>
+      <text class="t-s t-mut" x="314" y="116">firmware in RAM</text>
+      <text class="t-s t-mut" x="314" y="132">(trx-decim16)</text>
+      <!-- antenna A -->
+      <line class="ln" x1="450" y1="80" x2="470" y2="80"/><line class="ln" x1="470" y1="80" x2="470" y2="50"/>
+      <path class="ln" d="M460 50 L470 36 L480 50 Z"/>
+      <!-- air link -->
+      <path class="lnacc" d="M490 46 Q 500 30 510 46 M520 46 Q 530 22 540 46"/>
+      <line class="lnacc" x1="490" y1="60" x2="600" y2="60" stroke-dasharray="6 5"/>
+      <text class="t-m t-acc" x="497" y="84">2394.250 MHz</text>
+      <text class="t-s t-mut" x="497" y="100">half duplex</text>
+      <!-- antenna B -->
+      <path class="ln" d="M620 50 L630 36 L640 50 Z"/>
+      <line class="ln" x1="630" y1="50" x2="630" y2="80"/><line class="ln" x1="630" y1="80" x2="650" y2="80"/>
+      <rect class="box2" x="650" y="55" width="150" height="90" rx="4"/>
+      <text class="t-l" x="664" y="80">Board B</text>
+      <text class="t-s t-mut" x="664" y="100">ESP32-S3</text>
+      <text class="t-s t-mut" x="664" y="116">firmware in RAM</text>
+      <text class="t-s t-mut" x="664" y="132">(trx-decim16)</text>
+      <line class="ln" x1="800" y1="100" x2="840" y2="100"/>
+      <rect class="box" x="840" y="40" width="140" height="120" rx="4"/>
+      <text class="t-l" x="854" y="66">PC (B)</text>
+      <text class="t-s t-mut" x="854" y="88">same program,</text>
+      <text class="t-s t-mut" x="854" y="104">second window</text>
+      <!-- Beacon -->
+      <rect class="box2" x="300" y="215" width="190" height="95" rx="4"/>
+      <text class="t-l" x="314" y="240">Beacon board</text>
+      <text class="t-s t-mut" x="314" y="260">ESP32-S3, firmware in flash</text>
+      <text class="t-s t-mut" x="314" y="276">BOOT = mode, RGB LED = state</text>
+      <text class="t-s t-mut" x="314" y="292">USB power only</text>
+      <line class="ln" x1="490" y1="240" x2="510" y2="240"/><line class="ln" x1="510" y1="240" x2="510" y2="212"/>
+      <path class="ln" d="M500 212 L510 198 L520 212 Z"/>
+      <path class="lnsig" d="M530 206 Q 540 190 550 206 M560 206 Q 570 182 580 206"/>
+      <text class="t-m t-sig" x="590" y="205">2304.350 MHz · CW / Olivia 16/500</text>
+      <text class="t-s t-mut" x="590" y="222">every 30 s; heard by a station tuned to 2304.350</text>
+      <rect class="box" x="130" y="232" width="120" height="60" rx="4"/>
+      <text class="t-m" x="144" y="256">USB power</text>
+      <text class="t-s t-mut" x="144" y="274">5 V</text>
+      <line class="ln" x1="250" y1="262" x2="300" y2="262"/>
+    </svg>
+    </div>
+    <figcaption><b>Figure 1.</b> The stations exchange CW, Feld Hell and Olivia at 2394.250 MHz; each board alternates between receiving and transmitting (half duplex). The beacon board runs alone at 2304.350 MHz.</figcaption>
+  </figure>
+  <div class="col">
+  <h3>Who does what</h3>
+  <ul>
+    <li><b>The board</b> only moves raw data. When receiving, it tunes the radio, samples the signal, filters it down to 62.5 thousand samples per second and streams them to the PC. When transmitting, it plays a list of tiny instructions ("records") from the PC: one frequency offset and one power setting every 125 µs.</li>
+    <li><b>The PC</b> does everything that needs intelligence: finding the signal (it drifts by kilohertz), turning it into audio, decoding Morse, drawing the Hell picture, decoding Olivia, and, for sending, turning text into records.</li>
+    <li><b>The beacon</b> is the exception: its firmware generates its own records on the chip, so it needs no PC.</li>
+  </ul>
+  </div>
+</section>
+
+<!-- ============================================================ 4 -->
+<section id="board">
+  <div class="col">
+  <h2>4 · The board: circuit schematic</h2>
+  <p>The boards are common ESP32-S3 development boards with a single native USB-C port, a BOOT and a RESET button, and an addressable RGB LED on GPIO48. Figure 2 is the circuit such a board implements. It is drawn from the standard ESP32-S3 reference design and the pins this project uses. Component values are the usual reference values; a particular board may use a different regulator or LED, so check its own schematic before modifying it.</p>
+  </div>
+  <figure>
+    <div class="frame">
+    <svg viewBox="0 0 1000 560" width="1000" role="img" aria-label="Schematic of a typical ESP32-S3 dev board: USB-C connector, ESD protection, 3.3 V regulator, ESP32-S3 module with PCB antenna, reset and boot circuits, and WS2812 RGB LED">
+      <!-- USB-C J1 -->
+      <rect class="box" x="20" y="70" width="110" height="200" rx="3"/>
+      <text class="t-l" x="32" y="96">J1</text>
+      <text class="t-s t-mut" x="32" y="112">USB-C receptacle</text>
+      <text class="t-s" x="100" y="140" text-anchor="end">VBUS</text>
+      <text class="t-s" x="100" y="170" text-anchor="end">D+</text>
+      <text class="t-s" x="100" y="200" text-anchor="end">D−</text>
+      <text class="t-s" x="100" y="230" text-anchor="end">CC1/CC2</text>
+      <text class="t-s" x="100" y="258" text-anchor="end">GND</text>
+      <!-- VBUS line to LDO -->
+      <line class="ln" x1="130" y1="136" x2="300" y2="136"/>
+      <text class="t-s t-sig" x="150" y="128">+5V (VBUS)</text>
+      <!-- CC resistors -->
+      <line class="ln" x1="130" y1="226" x2="170" y2="226"/>
+      <rect class="box" x="170" y="218" width="40" height="16"/>
+      <text class="t-s" x="174" y="214">2× 5.1 kΩ</text>
+      <line class="ln" x1="210" y1="226" x2="230" y2="226"/><line class="ln" x1="230" y1="226" x2="230" y2="254"/>
+      <path class="ln" d="M220 254 h20 M224 259 h12 M228 264 h4"/>
+      <text class="t-s t-mut" x="150" y="290">CC pull-downs: sink, 5 V</text>
+      <line class="ln" x1="130" y1="254" x2="160" y2="254"/><path class="ln" d="M150 254 h20 M154 259 h12 M158 264 h4"/>
+      <!-- ESD D1 on D+ D- -->
+      <line class="ln" x1="130" y1="166" x2="420" y2="166"/>
+      <line class="ln" x1="130" y1="196" x2="420" y2="196"/>
+      <rect class="box2" x="250" y="176" width="60" height="44"/>
+      <text class="t-s" x="256" y="194">D1 ESD</text>
+      <text class="t-s t-mut" x="256" y="210">TVS array</text>
+      <line class="ln" x1="268" y1="166" x2="268" y2="176"/><line class="ln" x1="292" y1="196" x2="292" y2="176"/>
+      <text class="t-s t-acc" x="330" y="160">USB_D+ → GPIO20</text>
+      <text class="t-s t-acc" x="330" y="190">USB_D− → GPIO19</text>
+      <!-- LDO U2 -->
+      <rect class="box" x="300" y="100" width="110" height="56" rx="3"/>
+      <text class="t-m" x="312" y="122">U2 LDO</text>
+      <text class="t-s t-mut" x="312" y="140">5 V → 3.3 V, ≥ 500 mA</text>
+      <line class="ln" x1="280" y1="136" x2="280" y2="150"/><path class="ln" d="M270 150 h20 M270 155 h20"/>
+      <line class="ln" x1="280" y1="155" x2="280" y2="162"/>
+      <text class="t-s t-mut" x="236" y="152">10 µF</text>
+      <line class="ln" x1="410" y1="120" x2="560" y2="120"/>
+      <text class="t-s t-sig" x="430" y="112">+3V3</text>
+      <line class="ln" x1="440" y1="120" x2="440" y2="134"/><path class="ln" d="M430 134 h20 M430 139 h20"/>
+      <text class="t-s t-mut" x="456" y="140">10 µF + 100 nF</text>
+      <!-- Module U1 -->
+      <rect class="chip" x="560" y="40" width="250" height="420" rx="6"/>
+      <text class="t-l" x="576" y="66">U1 ESP32-S3 module</text>
+      <text class="t-s t-mut" x="576" y="84">e.g. WROOM-1 N16R8: chip, 40 MHz crystal,</text>
+      <text class="t-s t-mut" x="576" y="99">16 MB flash, 8 MB PSRAM, RF matching, shield</text>
+      <!-- antenna on module -->
+      <path class="lnacc" d="M700 40 v-14 h40 v8 h-10 v-8 h-10 v8 h-10 v-8 h-10" />
+      <text class="t-s t-acc" x="748" y="30">PCB antenna (RF out/in)</text>
+      <text class="t-s" x="576" y="126">3V3</text>
+      <text class="t-s" x="576" y="166">GPIO20 (USB D+)</text>
+      <text class="t-s" x="576" y="196">GPIO19 (USB D−)</text>
+      <text class="t-s" x="576" y="246">EN (chip enable)</text>
+      <text class="t-s" x="576" y="316">GPIO0 (strap: boot mode)</text>
+      <text class="t-s" x="576" y="386">GPIO48</text>
+      <text class="t-s" x="576" y="436">GND</text>
+      <text class="t-s t-mut" x="700" y="246">GPIO43/44 UART0</text>
+      <text class="t-s t-mut" x="700" y="262">(not used here)</text>
+      <line class="ln" x1="560" y1="120" x2="560" y2="120"/>
+      <line class="ln" x1="420" y1="166" x2="560" y2="166"/>
+      <line class="ln" x1="420" y1="196" x2="560" y2="196"/>
+      <!-- EN circuit -->
+      <line class="ln" x1="460" y1="242" x2="560" y2="242"/>
+      <circle class="dot" cx="490" cy="242" r="3"/>
+      <rect class="box" x="482" y="200" width="16" height="30"/><text class="t-s" x="400" y="212">R1 10 kΩ</text>
+      <line class="ln" x1="490" y1="200" x2="490" y2="120"/><circle class="dot" cx="490" cy="120" r="3"/>
+      <line class="ln" x1="490" y1="230" x2="490" y2="242"/>
+      <line class="ln" x1="460" y1="242" x2="460" y2="258"/><path class="ln" d="M450 258 h20 M450 263 h20"/>
+      <line class="ln" x1="460" y1="263" x2="460" y2="276"/><path class="ln" d="M450 276 h20 M454 281 h12 M458 286 h4"/>
+      <text class="t-s t-mut" x="390" y="266">C1 1 µF</text>
+      <line class="ln" x1="520" y1="242" x2="520" y2="262"/>
+      <path class="ln" d="M510 262 l20 -10 M520 268 v14"/><path class="ln" d="M510 282 h20 M514 287 h12 M518 292 h4"/>
+      <text class="t-s" x="410" y="300">SW1 RESET (EN to GND)</text>
+      <!-- BOOT circuit -->
+      <line class="ln" x1="470" y1="312" x2="560" y2="312"/>
+      <circle class="dot" cx="490" cy="312" r="3"/>
+      <rect class="box" x="482" y="326" width="16" height="30"/><text class="t-s" x="380" y="342">R2 10 kΩ</text>
+      <text class="t-s t-mut" x="380" y="356">(or internal pull-up)</text>
+      <line class="ln" x1="490" y1="312" x2="490" y2="326"/>
+      <line class="ln" x1="490" y1="356" x2="490" y2="366"/><text class="t-s t-sig" x="474" y="378">+3V3</text>
+      <line class="ln" x1="470" y1="312" x2="470" y2="292"/>
+      <path class="ln" d="M460 292 l20 -10 M470 286 v-12"/>
+      <path class="ln" d="M460 274 h20 M464 269 h12 M468 264 h4" transform="translate(0,0)"/>
+      <text class="t-s" x="330" y="318">SW2 BOOT (GPIO0 to GND)</text>
+      <!-- LED -->
+      <line class="ln" x1="420" y1="382" x2="560" y2="382"/>
+      <rect class="box2" x="300" y="360" width="120" height="70" rx="3"/>
+      <text class="t-m" x="310" y="382">LED1 WS2812</text>
+      <text class="t-s t-mut" x="310" y="398">RGB, serial data in</text>
+      <text class="t-s" x="425" y="376">DIN</text>
+      <text class="t-s t-mut" x="310" y="416">VDD 3V3/5V · 100 nF</text>
+      <text class="t-s t-mut" x="430" y="402">800 kbit/s, GRB</text>
+      <!-- GND -->
+      <line class="ln" x1="560" y1="432" x2="520" y2="432"/><path class="ln" d="M510 432 h20 M514 437 h12 M518 442 h4" />
+      <!-- notes -->
+      <text class="t-s t-mut" x="830" y="126">3V3: radio peak</text>
+      <text class="t-s t-mut" x="830" y="142">~0.3–0.5 A in Wi-Fi TX;</text>
+      <text class="t-s t-mut" x="830" y="158">this project's tone is</text>
+      <text class="t-s t-mut" x="830" y="174">far weaker</text>
+      <text class="t-s t-mut" x="830" y="246">EN low = reset;</text>
+      <text class="t-s t-mut" x="830" y="262">RC gives power-on delay</text>
+      <text class="t-s t-mut" x="830" y="316">GPIO0 low at reset:</text>
+      <text class="t-s t-mut" x="830" y="332">ROM download mode;</text>
+      <text class="t-s t-mut" x="830" y="348">high: boot from flash</text>
+      <text class="t-s t-mut" x="830" y="386">beacon: mode colours</text>
+      <text class="t-s t-mut" x="830" y="402">bit-banged at 240 MHz</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 2.</b> Representative circuit of the dev boards used. The radio needs nothing outside the module: matching network, crystal and antenna are inside the shield. USB D+/D− go straight to the chip's built-in USB Serial/JTAG on GPIO20/19. BOOT doubles as the beacon's mode button; the beacon firmware drives the WS2812 by timing pulses with the CPU's cycle counter.</figcaption>
+  </figure>
+  <div class="col">
+  <h3>Signal by signal</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Net</th><th>Function</th><th>Role here</th></tr></thead>
+    <tbody>
+      <tr><td class="num">VBUS → U2 → 3V3</td><td>USB 5 V regulated to 3.3 V for the module.</td><td>The only supply. The beacon runs from any USB charger or power bank.</td></tr>
+      <tr><td class="num">GPIO19/20</td><td>Native USB D−/D+.</td><td>Serial port on the PC (<code>COM4</code>, <code>COM5</code>, …): commands, I/Q stream, transmit records, and esptool loading.</td></tr>
+      <tr><td class="num">EN + SW1</td><td>Chip enable with RC delay; button pulls it low.</td><td>RESET restarts the firmware. A station's firmware lives in RAM and is reloaded each time the program starts.</td></tr>
+      <tr><td class="num">GPIO0 + SW2</td><td>Boot strap: low at reset selects download mode.</td><td>esptool can also force download mode over USB. In the beacon it is the mode/pause button.</td></tr>
+      <tr><td class="num">GPIO48 → WS2812</td><td>Single-wire RGB LED (24-bit GRB words).</td><td>Beacon state: amber hold-off, white calibrating, cyan tuning, red/green/purple modes, blue error.</td></tr>
+      <tr><td class="num">Module antenna</td><td>Printed inverted-F antenna, roughly 0–2 dBi.</td><td>Transmit and receive. No external antenna was used.</td></tr>
+    </tbody>
+  </table></div>
+  </div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section id="radio">
+  <div class="col">
+  <h2>5 · The radio inside the chip</h2>
+  <p>Espressif publishes the radio's behaviour as Wi-Fi, not its circuit. Figure 3 is a functional reconstruction: it shows the blocks a direct-conversion 2.4 GHz transceiver of this kind contains, labelled with what the esp32-sdr-trx firmware actually controls (register names come from that project's research).</p>
+  </div>
+  <figure>
+    <div class="frame">
+    <svg viewBox="0 0 1000 400" width="1000" role="img" aria-label="Block diagram of the ESP32-S3 radio: antenna, matching, transmit/receive switch, LNA, I/Q mixers, baseband filter and gain, 10-bit ADCs, sample dump to RAM; RF PLL with sigma-delta modulator from a 40 MHz crystal; power amplifier with gain code">
+      <rect class="chip" x="110" y="20" width="870" height="360" rx="8"/>
+      <text class="t-s t-acc" x="124" y="40">ESP32-S3 die (functional view)</text>
+      <!-- antenna -->
+      <path class="ln" d="M30 170 L45 146 L60 170 Z"/><line class="ln" x1="45" y1="170" x2="45" y2="200"/><line class="ln" x1="45" y1="200" x2="130" y2="200"/>
+      <text class="t-s" x="16" y="226">antenna</text>
+      <rect class="box" x="130" y="182" width="70" height="36"/><text class="t-s" x="138" y="204">match/balun</text>
+      <line class="ln" x1="200" y1="200" x2="230" y2="200"/>
+      <rect class="box" x="230" y="176" width="60" height="48"/><text class="t-s" x="238" y="196">T/R</text><text class="t-s" x="238" y="212">switch</text>
+      <!-- RX path -->
+      <line class="ln" x1="290" y1="188" x2="310" y2="188"/><line class="ln" x1="310" y1="188" x2="310" y2="120"/><line class="ln" x1="310" y1="120" x2="330" y2="120"/>
+      <path class="box" d="M330 100 L370 120 L330 140 Z"/><text class="t-s" x="326" y="94">LNA</text>
+      <line class="ln" x1="370" y1="120" x2="400" y2="120"/><line class="ln" x1="400" y1="85" x2="400" y2="155"/>
+      <line class="ln" x1="400" y1="85" x2="420" y2="85"/><line class="ln" x1="400" y1="155" x2="420" y2="155"/>
+      <circle class="box" cx="435" cy="85" r="15"/><path class="ln" d="M425 75 l20 20 M445 75 l-20 20"/>
+      <circle class="box" cx="435" cy="155" r="15"/><path class="ln" d="M425 145 l20 20 M445 145 l-20 20"/>
+      <text class="t-s" x="456" y="76">I</text><text class="t-s" x="456" y="176">Q</text>
+      <line class="ln" x1="450" y1="85" x2="490" y2="85"/><line class="ln" x1="450" y1="155" x2="490" y2="155"/>
+      <rect class="box" x="490" y="68" width="90" height="34"/><text class="t-s" x="496" y="89">LPF + PGA</text>
+      <rect class="box" x="490" y="138" width="90" height="34"/><text class="t-s" x="496" y="159">LPF + PGA</text>
+      <text class="t-s t-mut" x="486" y="124">width 20/40 MHz,</text><text class="t-s t-mut" x="486" y="134">gain selector 0..127</text>
+      <line class="ln" x1="580" y1="85" x2="610" y2="85"/><line class="ln" x1="580" y1="155" x2="610" y2="155"/>
+      <rect class="box" x="610" y="68" width="70" height="34"/><text class="t-s" x="618" y="89">ADC I</text>
+      <rect class="box" x="610" y="138" width="70" height="34"/><text class="t-s" x="618" y="159">ADC Q</text>
+      <text class="t-s t-mut" x="604" y="124">10 bit, 80 or</text><text class="t-s t-mut" x="604" y="134">16 Msps</text>
+      <line class="ln" x1="680" y1="85" x2="720" y2="85"/><line class="ln" x1="680" y1="155" x2="720" y2="155"/>
+      <rect class="box2" x="720" y="68" width="110" height="104"/><text class="t-m" x="730" y="92">Sample</text><text class="t-m" x="730" y="110">dump engine</text>
+      <text class="t-s t-mut" x="730" y="132">circular ring</text><text class="t-s t-mut" x="730" y="148">16384 I/Q pairs</text>
+      <line class="ln" x1="830" y1="120" x2="860" y2="120"/>
+      <rect class="box" x="860" y="68" width="105" height="104"/><text class="t-m" x="868" y="92">SRAM banks</text><text class="t-s t-mut" x="868" y="112">4 × 64 KiB</text><text class="t-s t-mut" x="868" y="128">→ 2 CPU cores</text><text class="t-s t-mut" x="868" y="144">CIC + FIR</text><text class="t-s t-mut" x="868" y="160">→ USB</text>
+      <!-- LO -->
+      <rect class="box2" x="330" y="268" width="230" height="86"/>
+      <text class="t-m" x="342" y="290">RF PLL (fractional-N)</text>
+      <text class="t-s t-mut" x="342" y="308">LO = 30 MHz × (32 + W/65536)</text>
+      <text class="t-s t-mut" x="342" y="324">step 457.76 Hz per unit of W</text>
+      <text class="t-s t-acc" x="342" y="342">SDM low byte of W: written 8000×/s</text>
+      <rect class="box" x="160" y="290" width="110" height="42"/><text class="t-s" x="168" y="308">40 MHz crystal</text><text class="t-s t-mut" x="168" y="324">(in the module)</text>
+      <line class="ln" x1="270" y1="311" x2="330" y2="311"/>
+      <line class="lnacc" x1="445" y1="268" x2="445" y2="210"/><line class="lnacc" x1="445" y1="210" x2="390" y2="210"/>
+      <line class="lnacc" x1="390" y1="210" x2="390" y2="85"/><line class="lnacc" x1="390" y1="85" x2="420" y2="85"/>
+      <line class="lnacc" x1="390" y1="155" x2="420" y2="155"/>
+      <text class="t-s t-acc" x="452" y="238">LO 0° / 90°</text>
+      <!-- TX path -->
+      <line class="lnsig" x1="560" y1="311" x2="640" y2="311"/>
+      <rect class="box" x="640" y="286" width="150" height="50"/><text class="t-s" x="648" y="304">PHY test tone →</text><text class="t-s" x="648" y="320">PA, gain code</text>
+      <text class="t-s t-sig" x="640" y="352">code 64 (max) … 127 (−17.9 dB)</text>
+      <line class="lnsig" x1="640" y1="311" x2="620" y2="311"/>
+      <path class="lnsig" d="M790 311 h20 v-60 h-570 v-39 h20"/>
+      <text class="t-s t-sig" x="590" y="246">TX: one carrier at LO + offset</text>
+      <line class="ln" x1="290" y1="212" x2="260" y2="212"/>
+    </svg>
+    </div>
+    <figcaption><b>Figure 3.</b> Functional view of the ESP32-S3 radio as this project uses it. Receive: the antenna signal is amplified, mixed to zero frequency against the PLL's local oscillator (LO) in two phases (I and Q), filtered and sampled by two 10-bit converters; the firmware copies those samples straight out of the converter's buffer. Transmit: the Wi-Fi PHY's built-in test tone puts a single carrier on the air; the firmware steers its frequency by rewriting the PLL's fractional word and its power through the PA gain code.</figcaption>
+  </figure>
+  <div class="col">
+  <h3>Receiving: direct conversion</h3>
+  <p>The receiver mixes the antenna signal with a local oscillator at (nearly) the wanted frequency. Everything near that frequency appears at low frequencies in two signals, I and Q, which together keep the difference between "above" and "below" the LO. The converters sample I and Q 16 million times a second in the build used here, which shows a 16 MHz-wide slice of spectrum around the LO. The firmware then keeps only the narrow part we need.</p>
+  <p>A direct-conversion receiver always shows a strong line at its own LO frequency (leakage). That line turned out to matter: the PC's frequency tracking once locked onto it instead of a weak signal (section 7).</p>
+  <h3>Transmitting: a steered test tone</h3>
+  <p>Wi-Fi chips contain a calibration mode that emits a plain carrier. The firmware turns it on, then changes two things on every update:</p>
+  <ul>
+    <li><b>Frequency.</b> The PLL frequency is set by a word <i>W</i>; one step of <i>W</i> moves the carrier 457.76 Hz. The firmware rewrites only the lowest byte of <i>W</i>, through the chip's internal analog control bus, 8000 times per second, with second-order noise shaping so that the average frequency lands on a grid 16 times finer (28.6 Hz).</li>
+    <li><b>Power.</b> A register holds the transmitter's gain code. Codes 64 to 127 span 17.9 dB, measured with a PlutoSDR. Code 64 is the strongest.</li>
+  </ul>
+  <div class="eq">f<sub>carrier</sub> = 30 MHz × (32 + W/65536) + q4 × 28.61 Hz &nbsp;&nbsp;·&nbsp;&nbsp; q4 ∈ [−672, +672] (±19.2 kHz) &nbsp;&nbsp;·&nbsp;&nbsp; P = P<sub>max</sub> − ΔdB(gain code)</div>
+  <p>The carrier cannot be switched fully off between Morse elements without restarting the PLL, and the weakest gain code is only 18 dB below the strongest. So during key-up the transmitter also moves the weak carrier 12 kHz away (the <i>space shift</i>), out of the receiver's audio passband.</p>
+  </div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section id="firmware" class="col">
+  <h2>6 · Firmware</h2>
+  <h3>6.1 A bare-metal RAM image</h3>
+  <p>The esp32-sdr-trx firmware has no operating system, no heap and no interrupts: both cores run polling loops. It is built with ESP-IDF v5.5's headers, ROM linker scripts and the vendor PHY library (<code>libphy.a</code>) for calibration, but none of ESP-IDF's runtime. The stations load it into RAM through the boot ROM's download mode each time the PC program starts (<code>esptool load-ram</code>, about 8 s); nothing is written to flash.</p>
+  <p>This project uses two images built from the same source:</p>
+  <ul>
+    <li><b>Transceiver, decimation 16</b> (<code>release/esp32-sdr-trx-trx-decim16.bin</code>): receiver plus transmitter, streaming at 62.5 ksps. Windows' USB serial driver carries only about 0.275 MB/s, so upstream's 250 ksps (16-bit) stream lost samples; the extra decimation stage was added here.</li>
+    <li><b>Beacon</b> (<code>release/esp32-beacon.bin</code>): the same radio code, with the command loop replaced by a beacon program (section 9).</li>
+  </ul>
+  <h3>6.2 Receive pipeline on the chip</h3>
+  <div class="eq">ADC 16 Msps → 4th-order CIC ÷16 → 1 Msps → FIR ÷16 (81 taps, passband ±15 kHz) → 62.5 ksps → shift → int8 I/Q → USB packets</div>
+  <p>The converter writes I/Q pairs into a circular ring in SRAM. Both CPU cores take turns on 16,000-pair units, each running its own copy of the decimator from its own instruction memory so they never compete. The CIC filter is computed with the S3's SIMD instructions. Each output packet carries a sequence number and sample index, so the PC can detect lost data. The final <i>output shift</i> scales the result into 8 bits: shift 4 suits boards on the same desk, while a distant signal needs gain 40 with shift 2 (section 10).</p>
+  <h3>6.3 Transmit records</h3>
+  <p>A transmission is a stream of 32-bit records from the PC, played at a fixed rate (8000 per second here):</p>
+  <figure>
+    <div class="frame">
+    <svg viewBox="0 0 680 120" width="680" role="img" aria-label="Transmit record bit layout: bits 0 to 15 signed frequency offset, bits 16 to 23 gain code, bits 24 to 31 flags">
+      <rect class="box2" x="20" y="30" width="320" height="44"/><rect class="box" x="340" y="30" width="160" height="44"/><rect class="box2" x="500" y="30" width="160" height="44"/>
+      <text class="t-s t-mut" x="20" y="22">bit 0</text><text class="t-s t-mut" x="320" y="22">15</text><text class="t-s t-mut" x="340" y="22">16</text><text class="t-s t-mut" x="480" y="22">23</text><text class="t-s t-mut" x="500" y="22">24</text><text class="t-s t-mut" x="640" y="22">31</text>
+      <text class="t-m" x="32" y="57">frequency offset (int16, 1/16 PLL step)</text>
+      <text class="t-m" x="352" y="57">gain code 64–127</text>
+      <text class="t-m" x="512" y="57">flags (bit 0: end)</text>
+      <text class="t-s t-mut" x="32" y="96">28.61 Hz per unit, clamped to ±44 steps (±20 kHz)</text>
+      <text class="t-s t-mut" x="352" y="96">0.28 dB per code</text>
+      <text class="t-s t-mut" x="512" y="96">last record</text>
+    </svg>
+    </div>
+    <figcaption><b>Figure 4.</b> One transmit record (little endian). 125 µs of air time each at 8000 records/s.</figcaption>
+  </figure>
+  <p>The chip waits until 4000 records are buffered (the PC keeps about 4800 queued), then keys the carrier and plays one record per tick. It reports buffer fill and underruns every 5 ms. If the PC stops sending for 0.5 s, the firmware drops the carrier by itself; a session also ends after 600 s. Before keying, the PC chooses an LO whose PLL word has its low byte in 48–207, so that offsets never carry into the next byte. That can move the LO up to about 15 kHz from the dial, which the records' offset then makes up.</p>
+  <h3>6.4 Changes this project made to the firmware</h3>
+  <ul>
+    <li><b>Decimation 16</b> (<code>decim16-firmware.patch</code>): the 62.5 ksps stream that Windows can carry without loss.</li>
+    <li><b>Transmit floor 2300 MHz</b> (from upstream's 2320), for the beacon in the US 2300–2310 MHz segment. The PLL itself covers 2210–2790 MHz.</li>
+    <li><b>Booting from flash</b> (<code>beacon/firmware-hooks.patch</code>). Upstream only ever ran after a download-mode load, which leaves the chip prepared. A flash boot needed:
+      <ul>
+        <li>the timer-group and RTC watchdogs' <i>flash-boot mode</i> cleared (clearing their enable bit alone does not stop them; the chip reset itself every ~0.3 s);</li>
+        <li>the BBPLL's analog control bus enabled and the crystal frequency set, as ESP-IDF's <code>rtc_clk_init()</code> does (otherwise the CPU never reached 240 MHz);</li>
+        <li><code>RTC_CNTL_BB_I2C_FORCE_PU</code> kept on, so every PHY, PLL and transmitter register write reaches the radio;</li>
+        <li>GPIO0's RTC pad mux and pad hold cleared (after a reset over USB the BOOT button stayed dead until a power cycle).</li>
+      </ul>
+    </li>
+    <li><b>Direct keying</b> (<code>radio_tx_key_on/update/off</code>): lets the beacon play records it generates itself, with the same noise shaping as the PC-fed path.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ 7 -->
+<section id="host">
+  <div class="col">
+  <h2>7 · PC software</h2>
+  <p>The station program is Python (NumPy for signal processing, Tk for the window), packaged as a single executable for Windows and Linux. One process drives one board, half duplex: while it transmits, its receive stream is paused.</p>
+  </div>
+  <figure>
+    <div class="frame">
+    <svg viewBox="0 0 1000 300" width="1000" role="img" aria-label="Receive and transmit signal chains in the PC software">
+      <text class="t-l" x="20" y="28">Receive</text>
+      <g>
+        <rect class="box2" x="20" y="44" width="110" height="56"/><text class="t-s" x="28" y="66">USB packets</text><text class="t-s t-mut" x="28" y="82">int8 I/Q 62.5 k</text>
+        <rect class="box" x="150" y="44" width="110" height="56"/><text class="t-s" x="158" y="66">conjugate,</text><text class="t-s" x="158" y="82">DC removal</text>
+        <rect class="box" x="280" y="44" width="110" height="56"/><text class="t-s" x="288" y="66">fine shift</text><text class="t-s t-mut" x="288" y="82">LO error → 0</text>
+        <rect class="box" x="410" y="44" width="130" height="56" style="stroke: var(--accent); stroke-width: 2"/><text class="t-s t-acc" x="418" y="66">AFC (RxAfc)</text><text class="t-s t-mut" x="418" y="82">carrier → 700 Hz</text>
+        <rect class="box" x="560" y="44" width="130" height="56"/><text class="t-s" x="568" y="66">USB demod</text><text class="t-s t-mut" x="568" y="82">200–2800 Hz, 48 k</text>
+        <rect class="box2" x="710" y="20" width="130" height="34"/><text class="t-s" x="718" y="42">CW decoder</text>
+        <rect class="box2" x="710" y="60" width="130" height="34"/><text class="t-s" x="718" y="82">Hell columns</text>
+        <rect class="box2" x="710" y="100" width="130" height="34"/><text class="t-s" x="718" y="122">Olivia receiver</text>
+        <rect class="box" x="860" y="44" width="120" height="56"/><text class="t-s" x="868" y="66">window,</text><text class="t-s" x="868" y="82">speaker monitor</text>
+        <path class="ln" d="M130 72 h20 M260 72 h20 M390 72 h20 M540 72 h20 M690 72 h10 v-35 h10 M700 72 v5 h10 M840 37 h10 v35 h10 M840 77 h20"/>
+        <path class="lnmut" d="M475 100 v40 h300 v-6"/>
+        <text class="t-s t-mut" x="560" y="152">Olivia takes complex baseband (room for kHz of drift)</text>
+      </g>
+      <text class="t-l" x="20" y="205">Transmit</text>
+      <rect class="box" x="20" y="220" width="110" height="56"/><text class="t-s" x="28" y="242">typed text</text><text class="t-s t-mut" x="28" y="258">+ 2 s lead tone</text>
+      <rect class="box2" x="150" y="220" width="170" height="56"/><text class="t-s" x="158" y="242">mode encoder</text><text class="t-s t-mut" x="158" y="258">Morse · Hell · Olivia</text>
+      <rect class="box" x="340" y="220" width="170" height="56"/><text class="t-s" x="348" y="242">keyer → records</text><text class="t-s t-mut" x="348" y="258">tone, envelope, space shift</text>
+      <rect class="box2" x="530" y="220" width="150" height="56"/><text class="t-s" x="538" y="242">txlink session</text><text class="t-s t-mut" x="538" y="258">keep ≈4800 queued</text>
+      <rect class="box" x="700" y="220" width="130" height="56"/><text class="t-s" x="708" y="242">board plays</text><text class="t-s t-mut" x="708" y="258">8000 rec/s</text>
+      <path class="lnsig" d="M130 248 h20 M320 248 h20 M510 248 h20 M680 248 h20 M830 248 h40"/>
+      <path class="lnsig" d="M870 248 L885 228 L900 248 Z"/>
+    </svg>
+    </div>
+    <figcaption><b>Figure 5.</b> The PC's signal chains. The AFC is the heart of reception: these transmitters drift by kilohertz, so the program finds and follows the carrier before anything is decoded.</figcaption>
+  </figure>
+  <div class="col">
+  <h3>Following a drifting signal (AFC)</h3>
+  <p>A cold board drifts 110–190 Hz per second at key-on and settles to about 1 Hz/s after a few minutes; two boards' crystals also disagree by up to ~13 kHz. A Morse decoder listening at one audio pitch would lose the signal within a second. <code>RxAfc</code> therefore looks at the spectrum every 65 ms (a 4096-point FFT, 15 Hz bins) and mixes the carrier to 700 Hz:</p>
+  <ul>
+    <li><b>New signals</b> are found by comparing each spectrum with the median of the last 4 s, which hides the receiver's own fixed spurs. A candidate must appear at the same frequency in two frames in a row: one of ~1000 noise bins passes 10 dB almost every frame, but never twice in one place.</li>
+    <li><b>Steady carriers</b> (a beacon) become part of that median within seconds, so a locked carrier is also followed directly in the plain spectrum within ±400 Hz, and a very strong one (40 dB) is locked without the median test.</li>
+    <li><b>Weak carriers</b> are followed slowly and down to 10 dB above the noise, but only within 15 dB of their own recent strength, so noise between a strong station's letters is never mistaken for it.</li>
+    <li><b>Known non-signals</b> are ignored: the transmitter's own space-shifted carrier (12 kHz away), and the receiver's LO leakage, which sits at the LO's fine-tuning offset rather than at 0 Hz.</li>
+    <li><b>Olivia and Hell</b> use a hold mode: lock on the steady lead tone, fit its drift as a straight line, and mix along that line through the message.</li>
+  </ul>
+  <h3>Main modules</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>File</th><th>Job</th></tr></thead>
+    <tbody>
+      <tr><td class="num">espdr_trx_tk.py</td><td>Program entry: board selector, window, options (<code>--dial</code>, <code>--rx-gain</code>, <code>--rx-shift</code>, <code>--accept-licence</code>).</td></tr>
+      <tr><td class="num">trx_board.py</td><td>One board as a half-duplex transceiver: receive thread, DSP thread, send paths per mode, beacon cycle.</td></tr>
+      <tr><td class="num">espdr_fldigi.py</td><td>Shared DSP: <code>RxAfc</code>, <code>UsbDemod</code>, <code>CwKeyer</code>, <code>Transmitter</code>, Morse audio.</td></tr>
+      <tr><td class="num">cw_decoder.py · hell.py · olivia.py · olivia_rx.py</td><td>Mode encoders and decoders.</td></tr>
+      <tr><td class="num">espdr (installed package)</td><td>Upstream host library: USB link protocol, board loading through esptool, LO planning, record packing. Patched for Windows by <code>espdr-windows.patch</code>.</td></tr>
+      <tr><td class="num">packaging/, .github/workflows</td><td>One-file executables (PyInstaller) and tagged releases.</td></tr>
+    </tbody>
+  </table></div>
+  </div>
+</section>
+
+<!-- ============================================================ 8 -->
+<section id="modes" class="col">
+  <h2>8 · The three modes</h2>
+  <div class="tbl"><table>
+    <thead><tr><th></th><th>CW (Morse)</th><th>Feld Hellschreiber</th><th>Olivia 8/250 · 16/500</th></tr></thead>
+    <tbody>
+      <tr><td>Idea</td><td>Carrier on/off in dots and dashes</td><td>Text sent as a picture, column by column</td><td>One of 8 or 16 tones per symbol, heavy error correction</td></tr>
+      <tr><td>Speed</td><td class="num">12 WPM (stations), 20 WPM (beacon)</td><td class="num">2.5 char/s, 122.5 baud</td><td class="num">≈ 1.5 / 2 char/s</td></tr>
+      <tr><td>Bandwidth</td><td class="num">≈ 100 Hz</td><td class="num">≈ 300 Hz</td><td class="num">250 / 500 Hz</td></tr>
+      <tr><td>Timing</td><td>PARIS: dot 60 ms at 20 WPM; 5 ms raised-cosine edges</td><td>Glyph 5×7 in 7 columns; column 57.14 ms; 14 elements of 4.08 ms</td><td>Symbol 32 ms; tones 31.25 Hz apart around 700 Hz</td></tr>
+      <tr><td>Receiver</td><td>Envelope at 700 Hz, adaptive threshold, dot length follows the sender</td><td>Level in 28 slots per column, drawn as an image; auto phase on the lead tone</td><td>Tone search, drift tracking, block sync, soft decoding</td></tr>
+      <tr><td>Coding</td><td>none</td><td>none (read by eye)</td><td>64-chip Walsh–Hadamard per character, scrambler 0xE257E6D0291574EC (shift 13), Gray-coded tones</td></tr>
+      <tr><td>Weak signals</td><td>Needs the most signal</td><td>Readable by eye through noise</td><td>Decodes below the noise (≈ −9 dB in 3 kHz here)</td></tr>
+    </tbody>
+  </table></div>
+  <p>On this transmitter every mode is built from the same two levers: a frequency offset and a gain code per record. CW changes the gain code (with the space shift during key-up). Hell does the same, faster, with a 1 ms envelope instead of 5 ms. Olivia keeps the gain constant and steps the frequency to a new tone every 32 ms. Because Olivia's 31.25 Hz tone spacing does not fall on the 28.6 Hz record grid, consecutive records carry the rounding remainder forward, so each tone's average frequency is exact.</p>
+</section>
+
+<!-- ============================================================ 9 -->
+<section id="beacon" class="col">
+  <h2>9 · The standalone beacon</h2>
+  <p>The beacon is the same firmware with its command loop replaced. It calibrates the radio itself, keys the transmitter and generates its 8000 records per second on the chip, so it runs from any USB power source. Its ID (<code>DE W4DQB/EXP</code>) is set at build time; the Olivia version of the ID is encoded on the PC during the build by the station's own Olivia code and stored as a 256-symbol table in instruction RAM, because the image's 8 KB data region was full.</p>
+  <div class="tbl"><table>
+    <thead><tr><th>Mode</th><th>LED</th><th>Each 30 s period</th></tr></thead>
+    <tbody>
+      <tr><td>CW (power-up default)</td><td><span class="status part">red</span></td><td>Word space, ID at 20 WPM, then steady carrier to the end of the period</td></tr>
+      <tr><td>Olivia 16/500</td><td><span class="status ok">green</span></td><td>2 s lead tone, 8.2 s of Olivia, then carrier off</td></tr>
+      <tr><td>Both in turn</td><td><span class="status" style="color: var(--muted)">purple</span></td><td>CW one period, Olivia the next; carrier off 4 s before each Olivia ID so the receiver sees a fresh lead tone</td></tr>
+    </tbody>
+  </table></div>
+  <p><b>Start-up sequence</b>, shown on the LED: amber blinking once a second for 5 s (also a check of the CPU clock), white while the radio calibrates, cyan while the transmitter tunes, then the mode's colour, bright while transmitting and dim while not. <b>BOOT</b>: a short press moves to the next mode; a 1.5 s hold pauses (the LED blinks the mode's colour). Blinking blue means the radio could not be set up.</p>
+  <p><b>Booting.</b> The image holds RAM segments only and sits at flash address 0, where the boot ROM loads it directly, without ESP-IDF's second-stage bootloader. Getting there needed the four start-up fixes in section 6.4. They were found without a serial console by writing register snapshots and progress markers into RTC memory, which survives a reset, and reading them back with esptool.</p>
+</section>
+
+<!-- ============================================================ 10 -->
+<section id="results" class="col">
+  <h2>10 · Measurements and results</h2>
+  <h3>Transmit power</h3>
+  <p>Upstream measured about −35 dBm radiated at the weakest gain code (code 127) with a PlutoSDR at 50 cm, ±10 dB, varying about 10 dB from run to run. Adding the 17.9 dB gain range gives roughly <b>−17 dBm EIRP (≈ 20 µW)</b> at code 64. Harmonics and spurious emissions are unmeasured.</p>
+  <h3>Stability</h3>
+  <p>Cold transmitters drift 110–190 Hz/s at key-on; warm ones about 1 Hz/s. Crystal offsets between boards reach ~13 kHz at 2.4 GHz (about 5 ppm). Upstream measured ±12 Hz over 5 s and up to 2 kHz over minutes.</p>
+  <h3>Mode tests between two boards (desk, 2394.250 MHz)</h3>
+  <div class="tbl"><table>
+    <thead><tr><th>Mode</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>CW, 12 WPM</td><td>Decoded both ways; occasional single-character error (e.g. <code>CG</code> for <code>CQ</code>)</td></tr>
+      <tr><td>Feld Hell</td><td>Clean both ways; letters whole with auto phase</td></tr>
+      <tr><td>Olivia 8/250 and 16/500</td><td>Clean both ways</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Range test: beacon at ~30 m</h3>
+  <p>The beacon was placed about 30 m (100 ft) away, outdoors in a tree, through two walls. Findings:</p>
+  <ul>
+    <li>An ESP32-C5 running ESP-WebSDR next to the station boards showed the beacon clearly, but its Wi-Fi access point <b>overloaded the station boards' receivers</b>; with it unplugged, the beacon appeared at about 17 dB above the noise per 65 ms frame (20–26 dB averaged over a second), fading 5–10 dB.</li>
+    <li>Default receive settings rounded the weak signal away in the 8-bit stream; <b>gain 40 with output shift 2</b> fixed that. Gain 60 or more overloaded the receiver.</li>
+    <li><b>Olivia 16/500 decoded</b> the distant beacon (<code>DE W4DQB/EXP</code>, about one clean ID in three). <b>CW did not</b> with the standard decoder, whose ~200 Hz listening window leaves this signal ~6 dB above the noise. Filtered to ±25 Hz offline, the CW ID stands ~10 dB clear. A narrowband CW decoder that decodes the recording is in review (PR #10), not yet tested live.</li>
+  </ul>
+  <h3>Theoretical range</h3>
+  <p>Free-space path loss at 2394 MHz is 100.0 + 20·log<sub>10</sub>(d/km) dB. With −17 dBm EIRP, isotropic antennas and an ESP32-S3 receiver (noise figure guessed at ~8 dB), CW in a 100 Hz bandwidth reaches about 14 km in free space; a 24 dBi dish at one end multiplies that by about 16. In practice line of sight, Fresnel clearance and obstacles dominate: walls and foliage cost 10–30 dB, which matches the 30 m result above being near the limit for CW.</p>
+</section>
+
+<!-- ============================================================ 11 -->
+<section id="limits" class="col">
+  <h2>11 · Limits, safety, band plan</h2>
+  <ul>
+    <li><b>Licensing.</b> Transmitting needs an amateur licence. The program asks once for acceptance of upstream's licence notice. Identify with your call sign; the software sends what you type.</li>
+    <li><b>Unmeasured emissions.</b> Power is an estimate; harmonics and spurs have not been measured. Do not add an amplifier or high-gain antenna without measuring.</li>
+    <li><b>Band plan used here.</b> Experimental two-way transmissions at <b>2394.250 MHz</b>; the beacon at <b>2304.350 MHz</b> (US 2300–2310 MHz segment). The firmware transmits only inside 2300–2450 MHz.</li>
+    <li><b>Beacon operation.</b> A flashed beacon transmits whenever it has power. Unattended or automatic operation has its own rules in licence conditions.</li>
+    <li><b>Hardware limits.</b> No receive filtering in front of the chip, so nearby 2.4 GHz transmitters (Wi-Fi) desensitise it; the key-up carrier is only 18 dB down (hence the space shift); frequency drift is large when cold.</li>
+    <li><b>Tested scope.</b> Three ESP32-S3 boards, one Windows 11 PC; the Linux executable is built and smoke-tested, not run on a board.</li>
+  </ul>
+</section>
+
+<!-- ============================================================ A -->
+<section id="appendix" class="col">
+  <h2>A · Glossary and file map</h2>
+  <div class="tbl"><table>
+    <tbody>
+      <tr><td>AFC</td><td>Automatic frequency control: finding and following the carrier.</td></tr>
+      <tr><td>CIC / FIR</td><td>Cascaded integrator–comb filter (cheap, coarse decimation) and finite impulse response filter (precise, flat passband).</td></tr>
+      <tr><td>Decimation</td><td>Lowering the sample rate after filtering, keeping only the wanted bandwidth.</td></tr>
+      <tr><td>Dial</td><td>The frequency a receiver is "tuned to"; in upper-sideband (USB) reception a carrier 700 Hz above the dial is heard as a 700 Hz tone.</td></tr>
+      <tr><td>EIRP</td><td>Effective isotropic radiated power: transmitter power plus antenna gain.</td></tr>
+      <tr><td>I/Q</td><td>The in-phase and quadrature parts of a signal mixed to 0 Hz; together they keep positive and negative frequencies apart.</td></tr>
+      <tr><td>LO</td><td>Local oscillator: the frequency the radio's PLL generates and mixes with.</td></tr>
+      <tr><td>PLL / SDM</td><td>Phase-locked loop frequency synthesizer; its sigma-delta modulator sets the fractional part of the multiplication.</td></tr>
+      <tr><td>Record</td><td>One 32-bit transmit instruction: frequency offset, gain code, flags.</td></tr>
+      <tr><td>Space shift</td><td>Moving the weak key-up carrier 12 kHz away so the receiver hears silence between Morse elements.</td></tr>
+      <tr><td>WPM</td><td>Words per minute of Morse ("PARIS" timing: dot = 1.2 s / WPM).</td></tr>
+    </tbody>
+  </table></div>
+  <h3>Running it</h3>
+<pre>ESP-Station --accept-licence                         # once, before transmitting
+ESP-Station --call W4DQB/EXP                         # station, 2394.250 MHz
+ESP-Station --dial 2304.350 --rx-gain 40 --rx-shift 2 --call W4DQB/EXP   # listen to the beacon
+beacon/build.sh &amp;&amp; python beacon/flash_beacon.py COM17                     # build and flash the beacon</pre>
+  <footer>
+    Prepared from the project's source code, firmware headers and test log (<code>SETUP-CHECKLIST.md</code>) as of 22 October 2026. The in-chip radio diagram is a functional reconstruction; Espressif does not publish the radio's circuit. The board schematic is representative of the ESP32-S3 dev boards used, with reference component values. Upstream: esp32-sdr-trx by jochenhammes, building on eSpDR by h0m3us3r.
+  </footer>
+</section>
+</div>

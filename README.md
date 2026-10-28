@@ -51,6 +51,9 @@ retune can decode wrongly; tested with one pair of boards only.
 
 ## How it works
 
+For the full technical write-up (the ESP32-S3, the firmware, a board schematic and the radio inside the chip), open
+[docs/technical-report.html](docs/technical-report.html) in a browser.
+
 ```
  typed text ─▶ Morse ─▶ CW keyer ─▶ board B (ESP32-S3) ════ 2.4 GHz ════▶ board A (ESP32-S3) ─▶ USB ─▶ AFC ─▶ USB demodulator ─┬─▶ CW decoder ─▶ window
                (8 kHz)  records 8000/s  test tone, steered                      16 Msps, decimated                              └─▶ monitor (speakers)
@@ -202,6 +205,7 @@ In both, the window works like this:
 | `release/` | esp32-sdr-trx v1.0.0-rc4 release files and the decimation-16 receiver image |
 | `scripts/` | Measurement tools: gain keying test, I/Q capture and analysis, USB throughput |
 | `SETUP-CHECKLIST.md` | Full setup log with every measurement |
+| `docs/technical-report.html` | Technical report: the chip, the code, the board schematic and the in-chip radio |
 
 ## Credits and licences
 
