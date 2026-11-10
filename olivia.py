@@ -139,6 +139,9 @@ class Mode:
         q4 = np.diff(np.round(exact), prepend=0.0)
         return txmodes.pack(q4, np.full(len(q4), code))
 
+    def record_stream(self, offset_hz, code, rate=8000):
+        return RecordStream(self, offset_hz, code, rate)
+
     # -- reference modulator (the overlapping raised-cosine symbols of the standard; for tests and interop)
     def audio(self, text, rate=FS, level=0.5, seed=1):
         tones = self.symbols(text)
@@ -154,3 +157,32 @@ class Mode:
             y[i * sep:i * sep + 2 * sep] += win * np.cos(2 * np.pi * f * t + phase)
             phase = (phase + 2 * np.pi * f * sep / rate + rng.choice([-0.5, 0.5]) * np.pi) % (2 * np.pi)
         return level * y / max(1e-9, np.abs(y).max())
+
+
+class RecordStream:
+    """tx_records in pieces, for typing while transmitting: a lead tone, then one block at a time. The error feedback carries
+    over from piece to piece, so the records of all pieces together are those of tx_records for the whole text."""
+
+    def __init__(self, mode, offset_hz, code, rate=8000):
+        from espdr import txmodes
+        self.m, self.offset_hz, self.code, self.rate = mode, offset_hz, code, rate
+        self.q4_hz, self.pack = txmodes.Q4_HZ, txmodes.pack
+        self.sep = int(round(mode.symbol_s * rate))
+        self.exact = 0.0                                          # running sum of the wanted fields
+        self.sent = 0.0                                           # running sum of the fields sent
+
+    def _records(self, hz):
+        exact = self.exact + np.cumsum((hz + self.offset_hz) / self.q4_hz)
+        rounded = np.round(exact)
+        q4 = np.diff(rounded, prepend=self.sent)
+        self.exact, self.sent = float(exact[-1]), float(rounded[-1])
+        return self.pack(q4, np.full(len(q4), self.code))
+
+    def lead(self, seconds):
+        return self._records(np.full(int(seconds * self.rate), self.m.center))
+
+    def block(self, chars):
+        """Up to `bits` characters (fewer are padded with NUL, the idle character) -> one block of records (2.048 s)."""
+        codes = [ord(c) & 0x7F for c in chars] + [0] * (self.m.bits - len(chars))
+        syms = [gray(int(s)) for s in self.m.encode_block(codes)]
+        return self._records(np.repeat(self.m.tone_hz(np.array(syms, dtype=float)), self.sep))

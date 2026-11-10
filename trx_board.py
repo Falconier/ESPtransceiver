@@ -279,6 +279,90 @@ class Transceiver:
             self.sending = False
             self.hold.clear()
 
+    # -- Olivia, typed live (as in fldigi)
+    def start_live(self, lead_s=2.0):
+        """Starts an Olivia transmission that sends what set_pending() offers, block by block (one block carries 3 or 4
+        characters in 2.048 s; idle blocks of NUL go out while nothing is typed). end_live() ends it once the typed text is
+        out, abort_live() at once."""
+        if not self.ready:
+            return "not ready"
+        if self.sending:
+            return "already transmitting"
+        if not self.mode.startswith("olivia-"):
+            return "live transmit is for the Olivia modes"
+        self.sending = True
+        self.live_lock = threading.Lock()
+        self.live_text, self.live_base, self.live_sent = "", 0, 0
+        self.live_end, self.live_abort = threading.Event(), threading.Event()
+        threading.Thread(target=self._live, args=(lead_s or 2.0,), daemon=True).start()
+        return None
+
+    def set_pending(self, text, base):
+        """The window's unsent text; `base`: how many characters of this transmission it had seen as sent when it took it."""
+        with self.live_lock:
+            self.live_text, self.live_base = text, base
+
+    def _take(self, n):
+        with self.live_lock:
+            avail = self.live_text[max(0, self.live_sent - self.live_base):]
+            chars = avail[:n]
+            self.live_sent += len(chars)
+            return chars
+
+    def end_live(self):
+        if self.sending and getattr(self, "live_end", None) is not None:
+            self.live_end.set()
+
+    def abort_live(self):
+        if self.sending and getattr(self, "live_abort", None) is not None:
+            self.live_abort.set()
+
+    def _live(self, lead_s):
+        name = self.mode.split("-", 1)[1]
+        m = olivia.Mode(name, center=self.a.tone)
+        t = self.tx_obj
+        try:
+            reach = txmodes.MAX_Q4 * txmodes.Q4_HZ
+            edge = max(abs(t.offset_hz + m.tone_hz(0)), abs(t.offset_hz + m.tone_hz(m.tones - 1)))
+            if edge > reach:
+                raise RuntimeError(f"Olivia {name} does not fit here: the band reaches {edge:.0f} Hz from the LO, records {reach:.0f}")
+            rs = m.record_stream(t.offset_hz, txmodes.peak_code(t.power_db), rate=br.TX_RATE)
+            self.hold.set()
+            if not self.idle.wait(5.0):
+                raise RuntimeError("the receiver did not stop")
+            self.log.put(f"TX {self.dial_mhz:.3f} MHz: Olivia {name}, live (RX or Ctrl+R ends, Esc aborts)")
+            s = t.session
+            s.configure(t.lo_hz, br.TX_RATE, limit_s=600)
+            s.begin(expect_word=txlink.lo_word(t.lo_hz))
+            q = queue.Queue()
+            q.put(rs.lead(lead_s))
+
+            def feed():
+                # One block waits in the queue while the stream sends the one before: text typed reaches the air within one
+                # to two blocks (2-4 s), and the next block is built just in time from what is typed by then.
+                while not self.live_abort.is_set():
+                    if q.qsize():
+                        time.sleep(0.05)
+                        continue
+                    chars = self._take(m.bits)
+                    if not chars and self.live_end.is_set():
+                        break
+                    q.put(rs.block(chars))
+                q.put(None)
+
+            threading.Thread(target=feed, daemon=True).start()
+            summary = s.stream(q, target_fill=br.TX_FILL, stop=self.live_abort)
+            br.log(f"TX: off ({txlink.END_REASONS.get(summary['reason'], summary['reason'])}; underruns {summary['underruns']})")
+            if summary["reason"] != 0 and not self.live_abort.is_set():
+                self.log.put(f"transmission ended: {txlink.END_REASONS.get(summary['reason'], summary['reason'])}")
+        except Exception as e:                                   # noqa: BLE001 - shown in the window
+            self.log.put(f"transmit failed: {e}")
+        finally:
+            self.live_abort.set()
+            self.afc.reset()
+            self.sending = False
+            self.hold.clear()
+
     # -- CW beacon
     def beacon_cycle(self, text, wpm, period_s, rate=None):
         """One beacon cycle as keyer audio: the ID in CW, then a steady carrier to the end of `period_s`."""
