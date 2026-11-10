@@ -1,0 +1,3 @@
+A gain 10: ids=0 decoded: ''
+A gain 20: ids=3 decoded: 'DE W4DQB/EXP DE W4DQB/EXP DE W4DQB/EXP '
+A gain 30: ids=3 decoded: 'DE W4DQB/EXP DE W4DQB/EXP DE W4DQB/EXP '
