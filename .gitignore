@@ -1,2 +1,7 @@
 packaging/work/
 dist/
+__pycache__/
+# station logs from day-to-day runs (the measurement logs kept in the repo are already tracked)
+/*.log
+# raw I/Q recordings (over 100 MB)
+captures/weak/
